@@ -1,0 +1,3186 @@
+-- ============================================================
+-- LARP SOURCES REDEEMER v5.0.0 (The Ultimate Hybrid)
+--   - Combines Aurora's UI finding, Traced's boolean clearing, and Stella's Remote Hijack
+--   - Removed ALL InvokeServer success/fail detection (Prevents Request Failed)
+--   - Stella 3.8.1 Fast Spam (5x per redeem)
+--   - Traced's "Redeem on Every Word" toggle in settings
+--   - Aurora style detailed logging
+-- ============================================================
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+local ok_boot, err_boot = pcall(function()
+
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
+local RunService        = game:GetService("RunService")
+local HttpService       = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LP        = Players.LocalPlayer
+local PlayerGui = LP:WaitForChild("PlayerGui")
+local env       = (typeof(getgenv) == "function" and getgenv()) or _G
+
+print("[LarpSources] boot start")
+for _, n in ipairs({"LarpSourcesGui","LarpSourcesLogs","LarpSourcesLearn","LarpSourcesWelcome",
+                    "LarpSourcesPreview","StellaHubGui","StellaHubLogs","StellaHubLearn","StellaHubWelcome",
+                    "StellaHubPreview","JetHubGui","JetHubLogs","JetHubLearn","JetHubError"}) do
+    local g = PlayerGui:FindFirstChild(n); if g then g:Destroy() end
+end
+if env.LarpSourcesStop then pcall(env.LarpSourcesStop) end
+if env.StellaHubStop then pcall(env.StellaHubStop) end
+if env.JetHubStop then pcall(env.JetHubStop) end
+
+local function showWelcome()
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "LarpSourcesWelcome"
+    sg.ResetOnSpawn = false
+    sg.IgnoreGuiInset = true
+    sg.DisplayOrder = 1000
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    sg.Parent = PlayerGui
+    local lbl = Instance.new("TextLabel")
+    lbl.AnchorPoint = Vector2.new(0.5, 0.5)
+    lbl.Position = UDim2.new(0.5, 0, 0.35, 0)
+    lbl.Size = UDim2.new(0.92, 0, 0, 130)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.GothamBlack
+    lbl.TextScaled = true
+    lbl.TextWrapped = true
+    lbl.TextColor3 = Color3.fromRGB(255, 30, 30)
+    lbl.TextStrokeColor3 = Color3.fromRGB(60, 0, 0)
+    lbl.TextStrokeTransparency = 0
+    lbl.TextTransparency = 1
+    lbl.Text = "hello welcome to larp sources Made by larp and Ron:)"
+    lbl.Parent = sg
+    local cap = Instance.new("UITextSizeConstraint")
+    cap.MaxTextSize = 52; cap.MinTextSize = 14; cap.Parent = lbl
+    task.spawn(function()
+        TweenService:Create(lbl, TweenInfo.new(0.35), {TextTransparency=0, TextStrokeTransparency=0}):Play()
+        task.wait(3.2)
+        TweenService:Create(lbl, TweenInfo.new(1.6), {TextTransparency=1, TextStrokeTransparency=1}):Play()
+        task.wait(1.7)
+        pcall(function() sg:Destroy() end)
+    end)
+end
+pcall(showWelcome)
+
+local getconns    = getconnections or (debug and debug.getconnections)
+local getupvalues = debug and (debug.getupvalues or debug.getupvalue)
+local setupvalue  = debug and (debug.setupvalue or setupvalue)
+local getinfo     = debug and (debug.getinfo or debug.info)
+
+local CONFIG_FILE = "larphub_redeemer.json"
+local RIDDLE_FILE = "larphub_riddles.txt"
+local ALIAS_FILE  = "larphub_aliases.txt"
+local cfg = {
+    codeSniper=false, autoSubmit=true, submitAfter=3,
+    riddleSolver=false, multiplier=true,
+    autoSnipeOnCodeIs=false,
+    onlyAfterUseCode=false,
+    spamMode=false,
+}
+pcall(function()
+    if isfile and isfile(CONFIG_FILE) then
+        local d = HttpService:JSONDecode(readfile(CONFIG_FILE))
+        if type(d)=="table" then
+            for k,v in pairs(cfg) do if d[k]~=nil then cfg[k]=d[k] end end
+            cfg.submitAfter = math.clamp(math.floor(tonumber(cfg.submitAfter) or 3),1,10)
+        end
+    end
+end)
+local function saveConfig()
+    if writefile then pcall(writefile, CONFIG_FILE, HttpService:JSONEncode(cfg)) end
+end
+
+local C = {
+    Bg=Color3.fromRGB(20,15,20), BgRow=Color3.fromRGB(25,20,28),
+    Accent=Color3.fromRGB(235,120,180), AccentHi=Color3.fromRGB(255,150,210),
+    Stroke=Color3.fromRGB(235,120,180), Text=Color3.fromRGB(235,235,240),
+    Muted=Color3.fromRGB(160,140,145), White=Color3.fromRGB(255,255,255),
+    Red=Color3.fromRGB(200,50,50), Green=Color3.fromRGB(34,197,94),
+    TrackOff=Color3.fromRGB(30,15,25), KnobOff=Color3.fromRGB(80,50,70),
+    Learn=Color3.fromRGB(180,100,255), LearnHi=Color3.fromRGB(220,160,255),
+    TabOff=Color3.fromRGB(30,22,32), TabOn=Color3.fromRGB(235,120,180),
+    Gold=Color3.fromRGB(255,215,0),
+}
+
+local SAB_DB = {
+    ["real name"]="SAMMY",["my real name"]="SAMMY",["owner real name"]="SAMMY",
+    ["creator name"]="SAMMY",["who created sab"]="SAMMY",["who made sab"]="SAMMY",
+    ["who is the owner"]="SAMMY",["who owns sab"]="SAMMY",["owner"]="SAMMY",
+    ["creator"]="SAMMY",["name"]="SAMMY",["my name"]="SAMMY",["game owner"]="SAMMY",
+    ["developer"]="SAMMY",["dev"]="SAMMY",["made by"]="SAMMY",
+    ["roblox username"]="SPYDERSAMMY",["my roblox username"]="SPYDERSAMMY",
+    ["roblox name"]="SPYDERSAMMY",["username"]="SPYDERSAMMY",["roblox"]="SPYDERSAMMY",
+    ["channel"]="SPYDERSAMMY",["handle"]="SPYDERSAMMY",
+    ["how old am i"]="24",["how old is sammy"]="24",["my age"]="24",["age"]="24",
+    ["birth year"]="2002",["year born"]="2002",["born year"]="2002",
+    ["birth day"]="FRIDAY",["day i was born"]="FRIDAY",["birthday"]="FRIDAY",
+    ["birth month"]="FEBRUARY",["month born"]="FEBRUARY",
+    ["where was i born"]="ALGERIA",["birthplace"]="ALGERIA",
+    ["where am i from"]="BRAZIL",["my country"]="BRAZIL",["country"]="BRAZIL",
+    ["nationality"]="BRAZILIAN",["my nationality"]="BRAZILIAN",
+    ["state"]="SAOPAULO",["my state"]="SAOPAULO",["city"]="SAOPAULO",["my city"]="SAOPAULO",
+    ["favorite color"]="BLUE",["my color"]="BLUE",["color"]="BLUE",
+    ["favorite sport"]="FOOTBALL",["sport"]="FOOTBALL",["football"]="FOOTBALL",
+    ["favorite football player"]="RONALDO",["football player"]="RONALDO",
+    ["favorite player"]="RONALDO",["player"]="RONALDO",["ronaldo"]="RONALDO",
+    ["favorite food"]="PIZZA",["my food"]="PIZZA",["food"]="PIZZA",
+    ["favorite animal"]="SPIDER",["my pet"]="SPIDER",["pet"]="SPIDER",["animal"]="SPIDER",
+    ["my cat name"]="NOVA",["cat name"]="NOVA",
+    ["favorite game"]="ROBLOX",["game"]="ROBLOX",
+    ["favorite number"]="SEVEN",["lucky number"]="SEVEN",["number"]="SEVEN",
+    ["youtube"]="SPYDERSAMMY",["discord"]="ACE",["twitter"]="SPYDERSAMMY",
+    ["tiktok"]="SPYDERSAMMY",["instagram"]="SPYDERSAMMY",
+    ["my favorite car color"]="RED",["my car color"]="RED",["car color"]="RED",
+    ["game created on"]="FRIDAY",["created on"]="FRIDAY",
+    ["release month"]="MAY",["release year"]="2025",
+    ["year sab was created"]="2025",["year the game was created"]="2025",
+    ["when was sab made"]="MAY162025",["when made"]="MAY162025",["date made"]="MAY162025",
+    ["release date"]="MAY162025",["when was sab created"]="MAY162025",
+    ["game release date"]="MAY162025",["when created"]="MAY162025",
+    ["first trait"]="LIGHTNING",["1st trait"]="LIGHTNING",["trait"]="LIGHTNING",
+    ["struck by lightning"]="MATEO",["lightning trait"]="MATEO",["lightning"]="MATEO",["mateo"]="MATEO",
+    ["first mutation"]="GOLD",["1st mutation"]="GOLD",["mutation 1"]="GOLD",
+    ["second mutation"]="DIAMOND",["2nd mutation"]="DIAMOND",["mutation 2"]="DIAMOND",
+    ["third mutation"]="BLOODROT",["3rd mutation"]="BLOODROT",["mutation 3"]="BLOODROT",
+    ["fourth mutation"]="RAINBOW",["4th mutation"]="RAINBOW",["mutation 4"]="RAINBOW",
+    ["fifth mutation"]="CANDY",["5th mutation"]="CANDY",["mutation 5"]="CANDY",
+    ["sixth mutation"]="LAVA",["6th mutation"]="LAVA",["mutation 6"]="LAVA",
+    ["seventh mutation"]="GALAXY",["7th mutation"]="GALAXY",["mutation 7"]="GALAXY",
+    ["eighth mutation"]="YINYANG",["8th mutation"]="YINYANG",["mutation 8"]="YINYANG",
+    ["ninth mutation"]="RADIOACTIVE",["9th mutation"]="RADIOACTIVE",["mutation 9"]="RADIOACTIVE",
+    ["tenth mutation"]="CURSED",["10th mutation"]="CURSED",["mutation 10"]="CURSED",
+    ["eleventh mutation"]="DIVINE",["11th mutation"]="DIVINE",["mutation 11"]="DIVINE",
+    ["twelfth mutation"]="CYBER",["12th mutation"]="CYBER",["mutation 12"]="CYBER",
+    ["thirteenth mutation"]="PHANTOM",["13th mutation"]="PHANTOM",["mutation 13"]="PHANTOM",
+    ["fourteenth mutation"]="CRYSTAL",["14th mutation"]="CRYSTAL",["mutation 14"]="CRYSTAL",
+    ["evil mutation"]="CURSED",["cursed mutation"]="CURSED",["evil"]="CURSED",
+    ["angelic mutation"]="DIVINE",["divine mutation"]="DIVINE",["angelic"]="DIVINE",
+    ["latest mutation"]="CRYSTAL",["newest mutation"]="CRYSTAL",["last mutation"]="CRYSTAL",
+    ["new mutation"]="CRYSTAL",["newest mutation added"]="CRYSTAL",
+    ["green mutation"]="RADIOACTIVE",["green"]="RADIOACTIVE",
+    ["purple mutation"]="GALAXY",["purple"]="GALAXY",
+    ["black and white mutation"]="YINYANG",["black and white"]="YINYANG",
+    ["yellow mutation"]="DIVINE",["yellow"]="DIVINE",
+    ["red mutation"]="CURSED",["red"]="CURSED",
+    ["orange mutation"]="LAVA",["orange"]="LAVA",
+    ["blue mutation"]="DIAMOND",["pink mutation"]="CANDY",
+    ["gold"]="GOLD",["diamond"]="DIAMOND",["bloodrot"]="BLOODROT",["rainbow"]="RAINBOW",
+    ["candy"]="CANDY",["lava"]="LAVA",["galaxy"]="GALAXY",["yinyang"]="YINYANG",
+    ["radioactive"]="RADIOACTIVE",["cursed"]="CURSED",["divine"]="DIVINE",
+    ["cyber"]="CYBER",["phantom"]="PHANTOM",["crystal"]="CRYSTAL",
+    ["color of gold mutation"]="YELLOW",["color of diamond mutation"]="BLUE",
+    ["color of bloodrot mutation"]="RED",["color of rainbow mutation"]="RAINBOW",
+    ["color of candy mutation"]="PINK",["color of lava mutation"]="ORANGE",
+    ["color of galaxy mutation"]="PURPLE",["color of yinyang mutation"]="BLACK",
+    ["color of radioactive mutation"]="GREEN",["color of cursed mutation"]="RED",
+    ["color of divine mutation"]="YELLOW",
+    ["what number is gold"]="1",["what number is diamond"]="2",["what number is bloodrot"]="3",
+    ["what number is rainbow"]="4",["what number is candy"]="5",["what number is lava"]="6",
+    ["what number is galaxy"]="7",["what number is yinyang"]="8",["what number is radioactive"]="9",
+    ["what number is cursed"]="10",["what number is divine"]="11",["what number is cyber"]="12",
+    ["what number is phantom"]="13",["what number is crystal"]="14",
+    ["first machine"]="RAINBOWMACHINE",["1st machine"]="RAINBOWMACHINE",
+    ["second machine"]="BUBBLEGUMMACHINE",["2nd machine"]="BUBBLEGUMMACHINE",
+    ["third machine"]="FUSEMACHINE",["3rd machine"]="FUSEMACHINE",
+    ["fourth machine"]="CRAFTMACHINE",["4th machine"]="CRAFTMACHINE",
+    ["fifth machine"]="WITCHFUSE",["5th machine"]="WITCHFUSE",
+    ["sixth machine"]="BRAINROTDEALER",["6th machine"]="BRAINROTDEALER",
+    ["seventh machine"]="BRAINROTTRADER",["7th machine"]="BRAINROTTRADER",
+    ["eighth machine"]="SANTASFUSE",["8th machine"]="SANTASFUSE",
+    ["ninth machine"]="SANTASSHOP",["9th machine"]="SANTASSHOP",
+    ["tenth machine"]="NEWYEARSMACHINE",["10th machine"]="NEWYEARSMACHINE",
+    ["eleventh machine"]="DUELSMACHINE",["11th machine"]="DUELSMACHINE",
+    ["twelfth machine"]="CUPIDSMACHINE",["12th machine"]="CUPIDSMACHINE",
+    ["thirteenth machine"]="TRADEMACHINE",["13th machine"]="TRADEMACHINE",
+    ["fourteenth machine"]="DIVINEFUSE",["14th machine"]="DIVINEFUSE",
+    ["fifteenth machine"]="EGGINCUBATOR",["15th machine"]="EGGINCUBATOR",
+    ["sixteenth machine"]="CYBERCRAFTMACHINE",["16th machine"]="CYBERCRAFTMACHINE",
+    ["seventeenth machine"]="SUMMERFUSE",["17th machine"]="SUMMERFUSE",
+    ["eighteenth machine"]="LOSTRADERS",["18th machine"]="LOSTRADERS",
+    ["newest machine"]="LOSTRADERS",["latest machine"]="LOSTRADERS",
+    ["haunted fuse"]="HAUNTEDFUSE",["haunted fuse machine"]="HAUNTEDFUSE",
+    ["newest brainrot added in haunted fuse"]="HAUNTEDBRAINROT",
+    ["newest brainrot in haunted fuse"]="HAUNTEDBRAINROT",
+    ["rainbowmachine"]="RAINBOWMACHINE",["bubblegummachine"]="BUBBLEGUMMACHINE",
+    ["fusemachine"]="FUSEMACHINE",["craftmachine"]="CRAFTMACHINE",["witchfuse"]="WITCHFUSE",
+    ["brainrotdealer"]="BRAINROTDEALER",["brainrottrader"]="BRAINROTTRADER",
+    ["santasfuse"]="SANTASFUSE",["santasshop"]="SANTASSHOP",["newyearsmachine"]="NEWYEARSMACHINE",
+    ["duelsmachine"]="DUELSMACHINE",["cupidsmachine"]="CUPIDSMACHINE",["trademachine"]="TRADEMACHINE",
+    ["divinefuse"]="DIVINEFUSE",["eggincubator"]="EGGINCUBATOR",
+    ["cybercraftmachine"]="CYBERCRAFTMACHINE",["summerfuse"]="SUMMERFUSE",["lostraders"]="LOSTRADERS",
+    ["rarest brainrot"]="HEADLESSHORSEMAN",["unobtainable"]="HEADLESSHORSEMAN",
+    ["headless horseman"]="HEADLESSHORSEMAN",["best brainrot"]="STRAWBERRYELEPHANT",
+    ["oldest brainrot"]="STRAWBERRYELEPHANT",["1st og"]="STRAWBERRYELEPHANT",
+    ["first og"]="STRAWBERRYELEPHANT",["first og added"]="STRAWBERRYELEPHANT",
+    ["worst brainrot"]="NOOBINIPIZZANINI",["most common brainrot"]="NOOBINIPIZZANINI",
+    ["2nd og"]="MEOWL",["second og"]="MEOWL",["second og added"]="MEOWL",
+    ["3rd og"]="SKIBIDITOILET",["third og"]="SKIBIDITOILET",["third og added"]="SKIBIDITOILET",
+    ["5th og"]="JOHNPORK",["fifth og"]="JOHNPORK",["fifth og added"]="JOHNPORK",
+    ["highest rarity"]="OG",["og"]="OG",["lowest rarity"]="COMMON",["common"]="COMMON",
+    ["uncommon"]="UNCOMMON",["rare"]="RARE",["epic"]="EPIC",["legendary"]="LEGENDARY",
+    ["fire represents"]="DRAGON",["fire"]="DRAGON",["dragon"]="DRAGON",
+    ["won the world cup"]="SPAIN",["world cup"]="SPAIN",
+    ["worst game owner"]="SECRETLOKII",["most boring game"]="KEYBOARDESCAPE",
+    ["who did sammy fight"]="JANDEL",["admin abuse war"]="GROWAGARDEN",
+    ["worst secret"]="KARKERKARKURKUR",["secret"]="KARKERKARKURKUR",
+    ["max players"]="EIGHT",["server capacity"]="EIGHT",["players"]="EIGHT",
+    ["brother of hydra bunny"]="CERBERUS",["cerberus"]="CERBERUS",
+    ["game name"]="STEALABRAINROT",["sab"]="STEALABRAINROT",["sab stands for"]="STEALABRAINROT",
+    ["number of mutations"]="14",["how many mutations"]="14",
+    ["number of machines"]="18",["how many machines"]="18",["total machines"]="18",
+    ["total rarities"]="SIX",["how many rarities"]="SIX",
+    ["game genre"]="SIMULATOR",["genre"]="SIMULATOR",["type of game"]="SIMULATOR",
+    ["first update"]="MUTATIONS",
+    ["favorite color favorite sport"]="BLUEFOOTBALL",
+    ["favorite color favorite food"]="BLUEPIZZA",
+    ["new event"]="RAININGCASH",["event"]="RAININGCASH",["raining cash"]="RAININGCASH",
+    ["new ritual"]="MONEYPUGGYRITUAL",["money puggy ritual"]="MONEYPUGGYRITUAL",
+    ["new brainrot from og craft"]="LOSDRAGONS",["los dragons"]="LOSDRAGONS",
+    ["1 of 1 base"]="1OF1BASE",["base"]="1OF1BASE",
+    ["67"]="67",
+}
+
+do
+    local EXTRA = {
+        ["real last name"]="BRAKTA", ["surname"]="BRAKTA", ["last name"]="BRAKTA",
+        ["family name"]="BRAKTA", ["real surname"]="BRAKTA",
+        ["studio"]="DOBIGSTUDIOS", ["game studio"]="DOBIGSTUDIOS",
+        ["publisher"]="DOBIGSTUDIOS", ["who publishes sab"]="DOBIGSTUDIOS",
+        ["which studio"]="DOBIGSTUDIOS", ["studios"]="DOBIGSTUDIOS",
+        ["roblox group"]="BRAZILIANSPYDER", ["group"]="BRAZILIANSPYDER",
+        ["my group"]="BRAZILIANSPYDER", ["group name"]="BRAZILIANSPYDER",
+        ["game release month"]="MAY", ["sab release month"]="MAY",
+        ["game release year"]="2025", ["sab release year"]="2025",
+        ["when released"]="MAY2025", ["release"]="MAY2025",
+        ["ccu record"]="25MILLION", ["peak players"]="25MILLION",
+        ["record players"]="25MILLION", ["highest ccu"]="25MILLION",
+        ["record ccu"]="25MILLION", ["concurrent players"]="25MILLION",
+        ["movie studio"]="STORYKITCHEN", ["who makes movie"]="STORYKITCHEN",
+        ["movie company"]="STORYKITCHEN",
+        ["innovation award"]="BESTCREATIVEDIRECTION",
+        ["award"]="BESTCREATIVEDIRECTION",
+        ["2025 award"]="BESTCREATIVEDIRECTION",
+        ["admin war opponent"]="JANDEL",
+        ["who fought sammy"]="JANDEL",
+        ["grow a garden dev"]="JANDEL",
+        ["lowest rarity"]="COMMON", ["highest rarity"]="OG",
+        ["rarest rarity"]="OG", ["top rarity"]="OG",
+        ["after common"]="RARE", ["2nd rarity"]="RARE",
+        ["after rare"]="EPIC", ["3rd rarity"]="EPIC",
+        ["after epic"]="LEGENDARY", ["4th rarity"]="LEGENDARY",
+        ["after legendary"]="MYTHIC", ["5th rarity"]="MYTHIC",
+        ["after mythic"]="BRAINROTGOD", ["6th rarity"]="BRAINROTGOD",
+        ["after brainrot god"]="SECRET", ["7th rarity"]="SECRET",
+        ["after secret"]="OG", ["8th rarity"]="OG",
+        ["before secret"]="BRAINROTGOD",
+        ["number of rarities"]="8", ["how many rarities"]="8",
+        ["total rarities"]="8",
+        ["rainbow multiplier"]="X10", ["rainbow mutation multiplier"]="X10",
+        ["diamond multiplier"]="X1.5", ["diamond mutation multiplier"]="X1.5",
+        ["lava multiplier"]="X6", ["lava mutation multiplier"]="X6",
+        ["cyber multiplier"]="X11", ["cyber mutation multiplier"]="X11",
+        ["cursed multiplier"]="X9", ["cursed mutation multiplier"]="X9",
+        ["default multiplier"]="X1", ["no mutation multiplier"]="X1",
+        ["gold color"]="YELLOW", ["diamond color"]="CYAN",
+        ["bloodrot color"]="DARKRED", ["candy color"]="PINK",
+        ["lava color"]="NEONORANGE", ["galaxy color"]="NEONPURPLE",
+        ["rainbow color"]="RGBCYCLE",
+        ["lava event"]="MOLTENEVENT", ["galaxy event"]="GALAXYEVENT",
+        ["bloodrot event"]="BLOODMOONEVENT",
+        ["taco trait multiplier"]="X3", ["taco multiplier"]="X3",
+        ["nyan trait multiplier"]="X6", ["nyan cat multiplier"]="X6",
+        ["lightning trait multiplier"]="X6",
+        ["taco trait event"]="TACOSHOWER",
+        ["nyan trait event"]="NYANCATEVENT",
+        ["taco trait appearance"]="TACOHAT",
+        ["trait stacking"]="YES", ["can traits stack"]="YES",
+        ["traits stack"]="YES", ["traits update"]="UPDATE5",
+        ["mythic spawn interval"]="15MINUTES", ["mythic spawn"]="15MINUTES",
+        ["legendary spawn interval"]="5MINUTES", ["legendary spawn"]="5MINUTES",
+        ["max mutations"]="1", ["max mutations per brainrot"]="1",
+        ["how do multipliers stack"]="MULTIPLIED",
+        ["multiplier stacking"]="MULTIPLIED",
+        ["first secret brainrot"]="LAVACCASATURNOSATURNITA",
+        ["first secret"]="LAVACCASATURNOSATURNITA",
+        ["worst common"]="NOOBINIPIZZANINI",
+        ["best rare"]="PENGOLINONUVOLETTO", ["worst rare"]="TRIPPITROPPI",
+        ["best epic"]="MUMMIORAPPITTO",    ["worst epic"]="CUPCAKEKOALA",
+        ["best legendary"]="SERAPHINOGRUYERO", ["worst legendary"]="BURBALONILOLILOLI",
+        ["best mythic"]="ORBIMOCHI",       ["worst mythic"]="FRIGOCAMELO",
+        ["best brainrot god"]="PRETZOROBO",["worst brainrot god"]="COCOFANTOELEFANTO",
+        ["best secret"]="GRIFFIN",         ["worst secret"]="LAVACCASATURNOSATURNITA",
+        ["best og"]="SPYDERELEPHANT",      ["worst og"]="SKIBIDITOILET",
+        ["best brainrot"]="SPYDERELEPHANT",["worst brainrot"]="NOOBINIPIZZANINI",
+        ["rarest brainrot"]="SPYDERELEPHANT",
+        ["best income"]="SPYDERELEPHANT",  ["worst income"]="NOOBINIPIZZANINI",
+        ["best price"]="SPYDERELEPHANT",   ["worst price"]="NOOBINIPIZZANINI",
+    }
+    for k, v in pairs(EXTRA) do
+        if not SAB_DB[k] then SAB_DB[k] = v end
+    end
+
+    local BRAINROT_LINES = [[
+Noobini Pizzanini|Common|$25|$1/s
+Lirili Larila|Common|$250|$3/s
+Tim Cheese|Common|$500|$5/s
+Fluriflura|Common|$750|$7/s
+Talpa Di Fero|Common|$1,000|$9/s
+Noobini Santanini|Common|$1,100|$11/s
+Svinina Bombardino|Common|$1,200|$10/s
+Raccooni Jandelini|Common|$1,300|$12/s
+Pipi Kiwi|Common|$1,500|$13/s
+Tartaragno|Common|$1,500|$13/s
+Pipi Corni|Common|$1,700|$14/s
+Holy Arepa|Common|$1,700|$14/s
+Trippi Troppi|Rare|$2,000|$15/s
+Tung Tung Tung Sahur|Rare|$3,000|$25/s
+Gangster Footera|Rare|$4,000|$30/s
+Bandito Bobritto|Rare|$4,500|$35/s
+Boneca Ambalabu|Rare|$5,000|$40/s
+Cacto Hipopotamo|Rare|$6,500|$50/s
+Ta Ta Ta Ta Sahur|Rare|$7,500|$55/s
+Tric Trac Baraboom|Rare|$9,000|$65/s
+Frogo Elfo|Rare|$9,200|$67/s
+Pipi Avocado|Rare|$9,500|$70/s
+Pengolino Nuvoletto|Rare|$9,600|$72/s
+Cupcake Koala|Epic|$8,000|$60/s
+Pinealotto Fruttarino|Epic|$9,700|$75/s
+Cappuccino Assassino|Epic|$10,000|$75/s
+Bandito Axolito|Epic|$12,500|$90/s
+Brr Brr Patapim|Epic|$15,000|$100/s
+Avocadini Antilopini|Epic|$17,500|$115/s
+Trulimero Trulicina|Epic|$20,000|$125/s
+Bambini Crostini|Epic|$22,500|$135/s
+Malame Amarele|Epic|$23,500|$140/s
+Bananita Dolphinita|Epic|$25,000|$150/s
+Perochello Lemonchello|Epic|$27,500|$160/s
+Brri Brri Bicus Dicus Bombicus|Epic|$30,000|$175/s
+Avocadini Guffo|Epic|$35,000|$225/s
+Ti Ti Ti Sahur|Epic|$37,500|$225/s
+Mangolini Parrocini|Epic|$38,500|$235/s
+Frogato Pirato|Epic|$39,000|$240/s
+Salamino Penguino|Epic|$40,000|$250/s
+Gato Celesto|Epic|$40,000|$250/s
+Doi Doi Do|Epic|$41,000|$260/s
+Penguin Tree|Epic|$42,000|$270/s
+Wombo Rollo|Epic|$42,500|$275/s
+Penguino Cocosino|Epic|$45,000|$300/s
+Mummio Rappitto|Epic|$47,500|$325/s
+Burbaloni Loliloli|Legendary|$35,000|$200/s
+Chimpanzini Bananini|Legendary|$50,000|$300/s
+Tirilikalika Tirilikalako|Legendary|$75,000|$450/s
+Ballerina Cappuccina|Legendary|$100,000|$500/s
+Chef Crabracadabra|Legendary|$150,000|$600/s
+Lionel Cactuseli|Legendary|$175,000|$650/s
+Glorbo Fruttodrillo|Legendary|$200,000|$750/s
+Quivioli Ameleonni|Legendary|$225,000|$1,000/s
+Blueberrinni Octopusini|Legendary|$250,000|$1,000/s
+Clickerino Crabo|Legendary|$250,000|$1,000/s
+Caramello Filtrello|Legendary|$255,000|$1,000/s
+Pipi Potato|Legendary|$256,000|$1,100/s
+Strawberrelli Flamingelli|Legendary|$275,000|$1,100/s
+Cocosini Mama|Legendary|$285,000|$1,200/s
+Pandaccini Bananini|Legendary|$300,000|$1,200/s
+Quackula|Legendary|$310,000|$1,200/s
+Pi Pi Watermelon|Legendary|$315,000|$1,200/s
+Signore Carapace|Legendary|$320,000|$1,300/s
+Sigma Boy|Legendary|$325,000|$1,300/s
+Buho del Cielo|Legendary|$325,000|$1,300/s
+Sigma Girl|Legendary|$325,000|$1,800/s
+Chocco Bunny|Legendary|$327,500|$1,400/s
+Puffaball|Legendary|$330,000|$1,500/s
+Sealo Regalo|Legendary|$342,000|$1,800/s
+Electro Quacko|Legendary|$345,000|$1,800/s
+Buho de Fuego|Legendary|$345,000|$1,800/s
+Seraphino Gruyero|Legendary|$347,500|$1,900/s
+Frigo Camelo|Mythic|$300,000|$1,200/s
+Harpuccino|Mythic|$347,500|$14,000/s
+Orangutini Ananassini|Mythic|$400,000|$1,700/s
+Rhino Toasterino|Mythic|$450,000|$2,100/s
+Bombardiro Crocodilo|Mythic|$500,000|$2,500/s
+Brutto Gialutto|Mythic|$600,000|$3,000/s
+Spioniro Golubiro|Mythic|$750,000|$3,500/s
+Bombombini Gusini|Mythic|$1,000,000|$5,000/s
+Zibra Zubra Zibralini|Mythic|$1,000,000|$6,000/s
+Tigrilini Watermelini|Mythic|$1,000,000|$7,500/s
+Avocadorilla|Mythic|$2,000,000|$7,500/s
+Cavallo Virtuoso|Mythic|$2,500,000|$7,500/s
+Te Te Te Sahur|Mythic|$2,500,000|$9,500/s
+Gorillo Subwoofero|Mythic|$2,700,000|$7,700/s
+Gorillo Watermelondrillo|Mythic|$3,000,000|$8,000/s
+Stoppo Luminino|Mythic|$3,000,000|$8,000/s
+Tracoducotulu Delapeladustuz|Mythic|$3,000,000|$12,000/s
+Tob Tobi Tobi|Mythic|$3,500,000|$8,500/s
+Lerulerulerule|Mythic|$3,500,000|$8,750/s
+Ganganzelli Trulala|Mythic|$4,000,000|$9,000/s
+Magi Ribbitini|Mythic|$4,000,000|$12,000/s
+Rhino Helicopterino|Mythic|$4,100,000|$11,000/s
+Jingle Jingle Sahur|Mythic|$4,300,000|$12,200/s
+Los Noobinis|Mythic|$4,300,000|$12,500/s
+Cachorrito Melonito|Mythic|$4,400,000|$13,000/s
+Spongini Quackini|Mythic|$4,400,000|$15,000/s
+Carloooo|Mythic|$4,500,000|$13,500/s
+Bee Loco|Mythic|$4,500,000|$13,500/s
+Elefanto Frigo|Mythic|$4,500,000|$14,000/s
+Berenjello Angello|Mythic|$4,600,000|$18,000/s
+Carrotini Brainini|Mythic|$4,700,000|$15,000/s
+Cocoteddy|Mythic|$4,700,000|$15,000/s
+Centrucci Nuclucci|Mythic|$4,800,000|$15,500/s
+Toiletto Focaccino|Mythic|$4,800,000|$16,000/s
+Jacko Spaventosa|Mythic|$4,800,000|$16,200/s
+Bananito Bandito|Mythic|$4,900,000|$16,500/s
+Tree Tree Tree Sahur|Mythic|$4,900,000|$17,000/s
+Bucketoro|Mythic|$5,700,000|$18,200/s
+Orbi Mochi|Mythic|$6,000,000|$18,500/s
+Fizzy Soda|Brainrot God|$4,900,000|$17,200/s
+Cocofanto Elefanto|Brainrot God|$5,000,000|$10,000/s
+Antonio|Brainrot God|$6,000,000|$18,500/s
+Girafa Celestre|Brainrot God|$7,500,000|$20,000/s
+Gattatino Nyanino|Brainrot God|$7,500,000|$35,000/s
+Gattatino Neonino|Brainrot God|$7,500,000|$20,000/s
+Chihuanini Taconini|Brainrot God|$8,500,000|$45,000/s
+Matteo|Brainrot God|$10,000,000|$50,000/s
+Tralalero Tralala|Brainrot God|$10,000,000|$50,000/s
+Los Crocodillitos|Brainrot God|$12,500,000|$55,000/s
+Tigroligre Frutonni|Brainrot God|$15,000,000|$60,000/s
+Odin Din Din Dun|Brainrot God|$15,000,000|$75,000/s
+Orcalero Orcala|Brainrot God|$15,000,000|$100,000/s
+Money Money Man|Brainrot God|$17,500,000|$65,000/s
+Alessio|Brainrot God|$17,500,000|$65,000/s
+Unclito Samito|Brainrot God|$20,000,000|$65,000/s
+Statutino Libertino|Brainrot God|$20,000,000|$75,000/s
+Tipi Topi Taco|Brainrot God|$20,000,000|$75,000/s
+Tralalita Tralala|Brainrot God|$20,000,000|$100,000/s
+Tukanno Banana|Brainrot God|$22,500,000|$100,000/s
+Extinct Ballerina|Brainrot God|$23,500,000|$125,000/s
+Vampira Cappucina|Brainrot God|$24,500,000|$125,000/s
+Espresso Signora|Brainrot God|$25,000,000|$70,000/s
+Trenozosturzzo Turbo 3000|Brainrot God|$25,000,000|$150,000/s
+Bulbito Bandito Traktorito|Brainrot God|$25,000,000|$205,000/s
+Urubini Flamenguini|Brainrot God|$30,000,000|$150,000/s
+Jacko Jack Jack|Brainrot God|$30,000,000|$150,000/s
+Trippi Troppi Troppa Trippa|Brainrot God|$30,000,000|$175,000/s
+Capi Taco|Brainrot God|$31,000,000|$155,000/s
+Sundrilla Sundae|Brainrot God|$31,000,000|$180,000/s
+Los Chihuaninis|Brainrot God|$32,000,000|$160,000/s
+Divino Platypio|Brainrot God|$32,000,000|$160,000/s
+Gattito Tacoto|Brainrot God|$32,500,000|$165,000/s
+Las Capuchinas|Brainrot God|$32,500,000|$185,000/s
+Ballerino Lololo|Brainrot God|$35,000,000|$200,000/s
+Los Tungtungtungcitos|Brainrot God|$37,500,000|$210,000/s
+Pakrahmatmamat|Brainrot God|$37,500,000|$215,000/s
+Ballerina Peppermintina|Brainrot God|$37,500,000|$215,000/s
+Piccione Macchina|Brainrot God|$40,000,000|$225,000/s
+Pakrahmatmatina|Brainrot God|$40,500,000|$225,000/s
+Los Bombinitos|Brainrot God|$42,500,000|$220,000/s
+Tractoro Dinosauro|Brainrot God|$42,500,000|$230,000/s
+Brr Es Teh Patipum|Brainrot God|$45,000,000|$225,000/s
+Cacasito Satalito|Brainrot God|$45,000,000|$240,000/s
+Orcalita Orcala|Brainrot God|$45,000,000|$240,000/s
+Aquanaut|Brainrot God|$45,500,000|$245,000/s
+Tartaruga Cisterna|Brainrot God|$45,000,000|$250,000/s
+Snailenzo|Brainrot God|$45,000,000|$250,000/s
+Corn Corn Corn Sahur|Brainrot God|$45,000,000|$250,000/s
+Squalanana|Brainrot God|$45,000,000|$250,000/s
+Mummy Ambalabu|Brainrot God|$45,000,000|$250,000/s
+Los Orcalitos|Brainrot God|$45,000,000|$310,000/s
+Dug Dug Dug|Brainrot God|$45,500,000|$255,000/s
+Trenotubo Axolotrico 9000|Brainrot God|$45,500,000|$255,000/s
+Ginger Globo|Brainrot God|$45,700,000|$257,500/s
+Yeti Claus|Brainrot God|$45,700,000|$267,500/s
+Crabbo Limonetta|Brainrot God|$46,000,000|$230,000/s
+Los Tipi Tacos|Brainrot God|$46,000,000|$260,000/s
+Tootini Shrimpini|Brainrot God|$46,000,000|$260,000/s
+Granchiello Spiritell|Brainrot God|$46,000,000|$260,000/s
+Frio Ninja|Brainrot God|$46,500,000|$265,000/s
+Lumaca Malefica|Brainrot God|$46,500,000|$265,000/s
+Piccionetta Macchina|Brainrot God|$47,000,000|$270,000/s
+Bunny Tralala|Brainrot God|$47,000,000|$270,000/s
+Boba Panda|Brainrot God|$47,000,000|$270,000/s
+Mastodontico Telepiedone|Brainrot God|$47,500,000|$275,000/s
+Los Gattitos|Brainrot God|$47,500,000|$275,000/s
+Bambu Bambu Sahur|Brainrot God|$47,500,000|$275,000/s
+Chrismasmamat|Brainrot God|$47,700,000|$277,500/s
+Anpali Babel|Brainrot God|$48,000,000|$280,000/s
+Astrolero Cervalero|Brainrot God|$48,000,000|$280,000/s
+Lemonita Splashita|Brainrot God|$48,000,000|$280,000/s
+Cappuccino Clownino|Brainrot God|$48,000,000|$285,000/s
+Luv Luv Luv|Brainrot God|$48,300,000|$282,000/s
+Bombardini Tortinii|Brainrot God|$50,000,000|$225,000/s
+Brasilini Berimbini|Brainrot God|$55,500,000|$285,000/s
+Patteo|Brainrot God|$57,500,000|$287,500/s
+Belula Beluga|Brainrot God|$60,000,000|$290,000/s
+Krupuk Pagi Pagi|Brainrot God|$60,000,000|$290,000/s
+Skull Skull Skull|Brainrot God|$60,000,000|$290,000/s
+Cocoa Assassino|Brainrot God|$60,000,000|$291,000/s
+Tentacolo Tecnico|Brainrot God|$62,500,000|$295,000/s
+Ginger Cisterna|Brainrot God|$63,500,000|$293,500/s
+Dolphini Jetskini|Brainrot God|$64,500,000|$294,500/s
+Pop Pop Sahur|Brainrot God|$65,000,000|$295,000/s
+Noo La Polizia|Brainrot God|$67,000,000|$280,000/s
+Karkerheart Luvkur|Brainrot God|$67,500,000|$297,500/s
+Clovkur Kurkur|Brainrot God|$70,000,000|$305,000/s
+Eggdin Egg Egg Dun|Brainrot God|$72,500,000|$310,000/s
+Dumborino Miracello|Brainrot God|$75,000,000|$315,000/s
+Flippo Marino|Brainrot God|$75,500,000|$316,000/s
+Robo Grafito|Brainrot God|$76,000,000|$317,500/s
+Pretzo Robo|Brainrot God|$77,000,000|$320,000/s
+La Vacca Saturno Saturnita|Secret|$50,000,000|$250,000/s
+Pandanini Frostini|Secret|$64,000,000|$294,000/s
+Bisonte Giuppitere|Secret|$75,000,000|$300,000/s
+Blackhole Goat|Secret|$75,000,000|$400,000/s
+Jackorilla|Secret|$80,000,000|$315,000/s
+Agarrini Ia Palini|Secret|$80,000,000|$425,000/s
+Chachechi|Secret|$85,000,000|$400,000/s
+Karkerkar Kurkur|Secret|$100,000,000|$275,000/s
+Los Tortus|Secret|$100,000,000|$500,000/s
+Los Matteos|Secret|$100,000,000|$300,000/s
+Sammyni Spyderini|Secret|$100,000,000|$300,000/s
+Trenostruzzo Turbo 4000|Secret|$100,000,000|$310,000/s
+Chimpanzini Spiderini|Secret|$100,000,000|$325,000/s
+Boatito Auratito|Secret|$115,000,000|$525,000/s
+Fragola La La La|Secret|$125,000,000|$450,000/s
+Dul Dul Dul|Secret|$150,000,000|$375,000/s
+La Vacca Prese Presente|Secret|$160,000,000|$600,000/s
+Frankentteo|Secret|$175,000,000|$700,000/s
+Los Trios|Secret|$175,000,000|$700,000/s
+Karker Sahur|Secret|$185,000,000|$725,000/s
+Torrtuginni Dragonfrutini|Secret|$500,000,000|$350,000/s
+Los Tralaleritos|Secret|$100,000,000|$750,000/s
+Zombie Tralala|Secret|$100,000,000|$500,000/s
+La Cucaracha|Secret|$110,000,000|$475,000/s
+Vulturino Skeletono|Secret|$110,000,000|$500,000/s
+Guerriro Digitale|Secret|$120,000,000|$550,000/s
+Extinct Tralalero|Secret|$125,000,000|$450,000/s
+Yess My Examine|Secret|$130,000,000|$575,000/s
+Extinct Matteo|Secret|$140,000,000|$625,000/s
+Las Tralaleritas|Secret|$150,000,000|$650,000/s
+Rocco Disco|Secret|$150,000,000|$650,000/s
+Reindeer Tralala|Secret|$160,000,000|$600,000/s
+Las Vaquitas Saturnitas|Secret|$160,000,000|$750,000/s
+Pumpkin Spyderini|Secret|$165,000,000|$650,000/s
+Job Job Job Sahur|Secret|$175,000,000|$700,000/s
+Los Karkeritos|Secret|$200,000,000|$750,000/s
+Graipuss Medussi|Secret|$200,000,000|$1,000,000/s
+Santteo|Secret|$210,000,000|$800,000/s
+Fishboard|Secret|$215,000,000|$825,000/s
+Buntteo|Secret|$225,000,000|$800,000/s
+La Vacca Jacko Linterino|Secret|$225,000,000|$850,000/s
+Triplito Tralaleritos|Secret|$230,000,000|$875,000/s
+Trickolino|Secret|$235,000,000|$900,000/s
+Paradiso Axolottino|Secret|$235,000,000|$900,000/s
+GOAT|Secret|$237,600,000|$950,000/s
+Giftini Spyderini|Secret|$240,000,000|$999,900/s
+Los Spyderinis|Secret|$250,000,000|$450,000/s
+Love Love Love Sahur|Secret|$250,000,000|$1,000,000/s
+Perrito Burrito|Secret|$250,000,000|$1,000,000/s
+Bombardiro Vaccariro|Secret|$255,000,000|$1,000,000/s
+1x1x1x1|Secret|$255,500,000|$1,100,000/s
+La Vacca Lepre Lepreino|Secret|$255,500,000|$1,100,000/s
+Los Cucarachas|Secret|$300,000,000|$1,200,000/s
+Easter Easter Sahur|Secret|$300,000,000|$1,200,000/s
+Please My Present|Secret|$350,000,000|$1,300,000/s
+Cuadramat and Pakrahmatmamat|Secret|$400,000,000|$1,400,000/s
+Los Jobcitos|Secret|$500,000,000|$1,500,000/s
+Nooo My Hotspot|Secret|$500,000,000|$2,000,000/s
+Pot Hotspot|Secret|$500,000,000|$2,500,000/s
+Noo My Examine|Secret|$525,000,000|$1,700,000/s
+Telemorte|Secret|$550,000,000|$2,000,000/s
+La Sahur Combinasion|Secret|$550,000,000|$2,000,000/s
+List List List Sahur|Secret|$550,000,000|$2,000,000/s
+Bunny Bunny Bunny Sahur|Secret|$575,000,000|$2,250,000/s
+To To To Sahur|Secret|$575,000,000|$2,500,000/s
+Glaciator|Secret|$580,000,000|$2,300,000/s
+Pirulitoita Bicicletaire|Secret|$600,000,000|$2,500,000/s
+25|Secret|$600,000,000|$2,500,000/s
+Santa Hotspot|Secret|$625,000,000|$2,600,000/s
+Horegini Boom|Secret|$650,000,000|$2,700,000/s
+Buho de Volto|Secret|$650,000,000|$2,750,000/s
+Quesadilla Crocodila|Secret|$700,000,000|$3,000,000/s
+Pot Pumpkin|Secret|$700,000,000|$3,000,000/s
+Naughty Naughty|Secret|$700,000,000|$3,000,000/s
+Cupid Cupid Sahur|Secret|$715,000,000|$3,100,000/s
+Ho Ho Ho Sahur|Secret|$725,000,000|$3,200,000/s
+Mi Gatito|Secret|$725,000,000|$3,200,000/s
+Chicleteira Bicicleteira|Secret|$750,000,000|$3,500,000/s
+Eid Eid Eid Sahur|Secret|$750,000,000|$3,500,000/s
+Cupid Hotspot|Secret|$750,000,000|$3,500,000/s
+Spaghetti Tualetti|Secret|$750,000,000|$6,000,000/s
+Esok Sekolah|Secret|$750,000,000|$3,000,000/s
+Quesadillo Vampiro|Secret|$750,000,000|$3,500,000/s
+Brunito Marsito|Secret|$750,000,000|$3,500,000/s
+Luck Luck Luck Sahur|Secret|$800,000,000|$3,750,000/s
+Flancito|Secret|$800,000,000|$3,750,000/s
+Chill Puppy|Secret|$800,000,000|$4,000,000/s
+Burrito Bandito|Secret|$800,000,000|$4,000,000/s
+Chicleteirina Bicicleteirina|Secret|$850,000,000|$4,000,000/s
+Granny|Secret|$850,000,000|$4,000,000/s
+Los Bunitos|Secret|$865,000,000|$4,200,000/s
+Los Quesadillas|Secret|$875,000,000|$4,500,000/s
+Futbolini Skatini|Secret|$875,000,000|$4,500,000/s
+Bunito Bunito Spinito|Secret|$900,000,000|$3,000,000/s
+Noo My Candy|Secret|$900,000,000|$5,000,000/s
+Arcadopus|Secret|$900,000,000|$5,000,000/s
+Los Nooo My Hotspotsitos|Secret|$1,000,000,000|$5,000,000/s
+Serafinna Medusella|Secret|$1,000,000,000|$5,500,000/s
+La Grande Combinassion|Secret|$1,000,000,000|$10,000,000/s
+La Easter Grande|Secret|$1,000,000,000|$10,000,000/s
+Rang Ring Bus|Secret|$1,100,000,000|$6,000,000/s
+Flipa Sandala|Secret|$1,100,000,000|$6,000,000/s
+Guest 666|Secret|$1,100,000,000|$6,600,000/s
+Los Mi Gatitos|Secret|$1,200,000,000|$6,500,000/s
+Ombrello Topolino|Secret|$1,200,000,000|$6,500,000/s
+Los Chicleteiras|Secret|$1,200,000,000|$7,000,000/s
+Noo My Eggs|Secret|$1,200,000,000|$7,000,000/s
+67|Secret|$1,200,000,000|$7,500,000/s
+Donkeyturbo Express|Secret|$1,200,000,000|$7,500,000/s
+Mariachi Corazoni|Secret|$1,200,000,000|$12,500,000/s
+Los Burritos|Secret|$1,400,000,000|$8,500,000/s
+Los 25|Secret|$1,500,000,000|$10,000,000/s
+Tacorillo Crocodillo|Secret|$1,500,000,000|$12,500,000/s
+Swag Soda|Secret|$1,800,000,000|$13,000,000/s
+Noo My Heart|Secret|$1,800,000,000|$13,000,000/s
+Noo My Gold|Secret|$1,850,000,000|$13,500,000/s
+Chimnino|Secret|$1,900,000,000|$14,000,000/s
+Los Combinasionas|Secret|$2,000,000,000|$15,000,000/s
+Chicleteira Noelteira|Secret|$2,000,000,000|$15,000,000/s
+Bananito|Secret|$2,000,000,000|$15,000,000/s
+Fishino Clownino|Secret|$2,100,000,000|$15,500,000/s
+Baskito|Secret|$2,100,000,000|$16,000,000/s
+Tacorita Bicicleta|Secret|$2,200,000,000|$16,500,000/s
+Los Sweethearts|Secret|$2,200,000,000|$16,500,000/s
+Spinny Hammy|Secret|$2,300,000,000|$17,000,000/s
+Camera Ramena|Secret|$2,300,000,000|$17,000,000/s
+Nuclearo Dinosauro|Secret|$2,500,000,000|$15,000,000/s
+Las Sis|Secret|$2,500,000,000|$17,500,000/s
+DJ Panda|Secret|$2,500,000,000|$17,500,000/s
+Chicleteira Cupideira|Secret|$2,500,000,000|$17,500,000/s
+La Karkerkar Combinasion|Secret|$2,500,000,000|$17,500,000/s
+Chillin Chili|Secret|$2,500,000,000|$25,000,000/s
+Chipso and Queso|Secret|$2,500,000,000|$25,000,000/s
+Money Money Reindeer|Secret|$2,500,000,000|$25,000,000/s
+Money Money Puggy|Secret|$2,600,000,000|$21,000,000/s
+Churrito Bunnito|Secret|$2,600,000,000|$21,000,000/s
+Celularcini Viciosini|Secret|$2,600,000,000|$22,500,000/s
+Los Planitos|Secret|$2,700,000,000|$18,500,000/s
+Snailo Clovero|Secret|$2,700,000,000|$18,500,000/s
+Los Mobilis|Secret|$2,700,000,000|$22,000,000/s
+Capitano Gullini|Secret|$2,700,000,000|$22,000,000/s
+Los 67|Secret|$2,700,000,000|$22,500,000/s
+Mieteteira Bicicleteira|Secret|$2,700,000,000|$26,000,000/s
+Tuff Toucan|Secret|$2,700,000,000|$26,000,000/s
+La Spooky Grande|Secret|$2,900,000,000|$24,500,000/s
+Los Spooky Combinasionas|Secret|$3,000,000,000|$20,000,000/s
+Cigno Fulgoro|Secret|$3,000,000,000|$20,000,000/s
+Los Candies|Secret|$3,000,000,000|$23,000,000/s
+Los Hotspositos|Secret|$3,000,000,000|$25,000,000/s
+Los Jolly Combinasionas|Secret|$3,000,000,000|$25,000,000/s
+Los Cupids|Secret|$3,000,000,000|$30,000,000/s
+Los Puggies|Secret|$3,000,000,000|$30,000,000/s
+W or L|Secret|$3,000,000,000|$30,000,000/s
+Tralalalaledon|Secret|$3,000,000,000|$37,500,000/s
+La Extinct Grande Combinasion|Secret|$3,200,000,000|$23,500,000/s
+Tralaledon|Secret|$3,500,000,000|$27,500,000/s
+La Jolly Grande|Secret|$3,500,000,000|$30,000,000/s
+Los Primos|Secret|$3,700,000,000|$31,000,000/s
+Bacuru and Egguru|Secret|$3,800,000,000|$24,000,000/s
+Eviledon|Secret|$3,800,000,000|$31,500,000/s
+Los Tacoritas|Secret|$4,000,000,000|$32,000,000/s
+Lovin Rose|Secret|$4,200,000,000|$32,500,000/s
+Abyssaloco|Secret|$4,300,000,000|$33,330,000/s
+Tang Tang Kelentang|Secret|$4,500,000,000|$33,500,000/s
+Coco and Mango|Secret|$4,500,000,000|$33,500,000/s
+Ketupat Kepat|Secret|$5,000,000,000|$35,000,000/s
+Los Bros|Secret|$6,000,000,000|$37,500,000/s
+Tictac Sahur|Secret|$6,000,000,000|$37,500,000/s
+La Romantic Grande|Secret|$7,000,000,000|$40,000,000/s
+Gingerat Gerat|Secret|$7,000,000,000|$40,000,000/s
+Orcaledon|Secret|$7,000,000,000|$40,000,000/s
+La Lucky Grande|Secret|$7,000,000,000|$40,000,000/s
+Ketchuru and Masturu|Secret|$7,500,000,000|$42,500,000/s
+Gym Bros|Secret|$7,500,000,000|$42,500,000/s
+Jolly Jolly Sahur|Secret|$8,000,000,000|$45,000,000/s
+Gold Gold Gold|Secret|$8,000,000,000|$45,000,000/s
+Money Money Bros|Secret|$9,000,000,000|$47,000,000/s
+Garama and Madundung|Secret|$10,000,000,000|$50,000,000/s
+La Anniversary Grande|Secret|$10,000,000,000|$50,000,000/s
+Rosetti Tualetti|Secret|$10,000,000,000|$50,000,000/s
+Nacho Spyder|Secret|$10,000,000,000|$50,000,000/s
+Steakini Fattini|Secret|$12,500,000,000|$55,000,000/s
+Sammyni Cakini|Secret|$12,500,000,000|$85,000,000/s
+Hopilikalika Hopilikalako|Secret|$15,000,000,000|$60,000,000/s
+Festive 67|Secret|$16,000,000,000|$67,000,000/s
+Sammyni Fattini|Secret|$20,000,000,000|$70,000,000/s
+Rubrikiko|Secret|$20,000,000,000|$70,000,000/s
+Love Love Bear|Secret|$23,000,000,000|$140,000,000/s
+La Ginger Sekolah|Secret|$23,000,000,000|$75,000,000/s
+Los Chillis|Secret|$23,000,000,000|$75,000,000/s
+Los Hackers|Secret|$23,000,000,000|$75,000,000/s
+Spooky and Pumpky|Secret|$25,000,000,000|$80,000,000/s
+Boppin Bunny|Secret|$25,000,000,000|$80,000,000/s
+Lavadorito Spinito|Secret|$30,000,000,000|$45,000,000/s
+La Food Combinasion|Secret|$30,000,000,000|$90,000,000/s
+Los Spaghettis|Secret|$40,000,000,000|$70,000,000/s
+Duggy Bros|Secret|$30,000,000,000|$90,000,000/s
+La Casa Boo|Secret|$40,000,000,000|$100,000,000/s
+Cash Or Card|Secret|$40,000,000,000|$100,000,000/s
+Fragrama and Chocrama|Secret|$40,000,000,000|$100,000,000/s
+Los Sekolahs|Secret|$45,000,000,000|$110,000,000/s
+Foxini Lanternini|Secret|$47,500,000,000|$115,000,000/s
+Kalika Bros|Secret|$47,500,000,000|$115,000,000/s
+La Secret Combinasion|Secret|$50,000,000,000|$125,000,000/s
+Los Amigos|Secret|$55,000,000,000|$130,000,000/s
+Fortunu and Cashuru|Secret|$55,000,000,000|$130,000,000/s
+Reinito Sleighito|Secret|$60,000,000,000|$140,000,000/s
+Ketupat Bros|Secret|$65,000,000,000|$145,000,000/s
+Burguro and Fryuro|Secret|$75,000,000,000|$150,000,000/s
+Cooki and Milki|Secret|$100,000,000,000|$155,000,000/s
+Capitano Moby|Secret|$125,000,000,000|$160,000,000/s
+Rosey and Teddy|Secret|$130,000,000,000|$165,000,000/s
+Popcuru and Fizzuru|Secret|$135,000,000,000|$170,000,000/s
+Hydra Bunny|Secret|$135,000,000,000|$170,000,000/s
+Celestial Pegasus|Secret|$150,000,000,000|$150,000,000/s
+Cerberus|Secret|$150,000,000,000|$175,000,000/s
+Jelly Moby|Secret|$150,000,000,000|$175,000,000/s
+La Supreme Combinasion|Secret|$200,000,000,000|$200,000,000/s
+Digi Narwhal|Secret|$200,000,000,000|$200,000,000/s
+Dragon Cannelloni|Secret|$250,000,000,000|$250,000,000/s
+Dragon Gingerini|Secret|$300,000,000,000|$300,000,000/s
+Hydra Dragon Cannelloni|Secret|$350,000,000,000|$350,000,000/s
+Dragon Aquanini|Secret|$375,000,000,000|$375,000,000/s
+Griffin|Secret|$400,000,000,000|$400,000,000/s
+Skibidi Toilet|OG|$450,000,000,000|$450,000,000/s
+John Pork|OG|$500,000,000,000|$500,000,000/s
+Headless Horseman|OG|$550,000,000,000|$550,000,000/s
+Meowl|OG|$600,000,000,000|$600,000,000/s
+Strawberry Elephant|OG|$750,000,000,000|$750,000,000/s
+Spyder Elephant|OG|$1,000,000,000,000|$1,000,000,000/s
+]]
+
+    for line in BRAINROT_LINES:gmatch("[^\r\n]+") do
+        local name, rarity, price, income =
+            line:match("^([^|]+)|([^|]+)|([^|]+)|([^|]+)$")
+        if name and rarity and price and income then
+            local n  = name:lower():gsub("%s+$","")
+            local R  = rarity:upper()
+            local function put(k, v)
+                if not SAB_DB[k] then SAB_DB[k] = v end
+            end
+            put("rarity of "..n, R)
+            put("what rarity is "..n, R)
+            put("what is the rarity of "..n, R)
+            put(n.." rarity", R)
+            put("which rarity is "..n, R)
+            put("price of "..n, price)
+            put("what is the price of "..n, price)
+            put("how much is "..n, price)
+            put("how much does "..n.." cost", price)
+            put("cost of "..n, price)
+            put(n.." price", price)
+            put("income of "..n, income)
+            put("what is the income of "..n, income)
+            put("how much does "..n.." earn", income)
+            put("how much does "..n.." make", income)
+            put(n.." income", income)
+        end
+    end
+
+    local COUNTS = {
+        ["number of common brainrots"]="12", ["number of rare brainrots"]="11",
+        ["number of epic brainrots"]="23", ["number of legendary brainrots"]="27",
+        ["number of mythic brainrots"]="39", ["number of brainrot god brainrots"]="93",
+        ["number of secret brainrots"]="224", ["number of og brainrots"]="6",
+    }
+    for k, v in pairs(COUNTS) do
+        if not SAB_DB[k] then SAB_DB[k] = v end
+    end
+end
+
+local EXIST_DB = {
+    ["strawberryelephant"]="1,277",["strawberryelephantgold"]="565",
+    ["strawberryelephantdiamond"]="263",["strawberryelephantrainbow"]="87",
+    ["strawberryelephantcrystal"]="1",["strawberryelephantphantom"]="1",
+    ["strawberryelephantdivine"]="25",["strawberryelephantcursed"]="20",
+    ["headlesshorseman"]="53",["headlesshorsemangold"]="14",["headlesshorsemandiamond"]="5",
+    ["meowl"]="2,164",["meowlgold"]="1,031",["meowldiamond"]="432",["meowlrainbow"]="105",
+    ["meowlcrystal"]="2",["meowlphantom"]="4",["meowldivine"]="64",["meowlcursed"]="51",
+    ["johnpork"]="451",["johnporkgold"]="178",["johnporkdiamond"]="64",
+    ["johnporkcrystal"]="6",["johnporkdivine"]="3",
+    ["skibiditoilet"]="2,590",["skibiditoiletgold"]="1,156",["skibiditoiletdiamond"]="498",
+    ["skibiditoiletrainbow"]="77",["skibiditoiletdivine"]="105",["skibiditoiletcursed"]="81",
+    ["signorecarapace"]="300",["signorecarapacegold"]="22",["signorecarapacediamond"]="7",
+    ["griffin"]="1,144",["griffingold"]="154",["griffindiamond"]="66",["griffindivine"]="170",
+    ["polaroidini"]="20",["polaroidinigold"]="2",["polaroidinidiamond"]="2",
+}
+
+local MONTHS_UP = {"JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE",
+                   "JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"}
+local DAYS_UP   = {"SUNDAY","MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY"}
+
+local learnedRiddles, aliasMeta, learnedAlternatives = {}, {}, {}
+local function ensureIO()
+    return type(writefile)=="function" and type(readfile)=="function" and type(isfile)=="function"
+end
+local function loadLearned()
+    if not ensureIO() then return end
+    pcall(function()
+        if isfile(RIDDLE_FILE) then
+            for line in readfile(RIDDLE_FILE):gmatch("[^\n]+") do
+                local q, rest = line:match("^(.-)%=(.*)$")
+                if q and rest and q~="" and rest~="" then
+                    local parts = {}
+                    for p in rest:gmatch("[^|]+") do parts[#parts+1]=p end
+                    if #parts>0 then
+                        local key = q:lower()
+                        learnedRiddles[key]=parts[1]; SAB_DB[key]=parts[1]
+                        if #parts>1 then
+                            learnedAlternatives[key]={}
+                            for i=2,#parts do
+                                learnedAlternatives[key][#learnedAlternatives[key]+1]=parts[i]
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        if isfile(ALIAS_FILE) then
+            for line in readfile(ALIAS_FILE):gmatch("[^\n]+") do
+                local a,s = line:match("^(.-)%=(.*)$")
+                if a and s and a~="" and s~="" then
+                    a,s = a:lower(), s:lower()
+                    aliasMeta[a]=s
+                    local primary = learnedRiddles[s] or SAB_DB[s]
+                    if primary then learnedRiddles[a]=primary; SAB_DB[a]=primary end
+                end
+            end
+        end
+    end)
+end
+local function saveLearned()
+    if not ensureIO() then return end
+    pcall(function()
+        local lines = {}
+        for q,a in pairs(learnedRiddles) do
+            if not aliasMeta[q] then
+                local alts = learnedAlternatives[q]
+                if alts and #alts>0 then
+                    lines[#lines+1] = q.."="..a.."|"..table.concat(alts,"|")
+                else lines[#lines+1] = q.."="..a end
+            end
+        end
+        writefile(RIDDLE_FILE, table.concat(lines,"\n"))
+        local al = {}
+        for a,s in pairs(aliasMeta) do al[#al+1] = a.."="..s end
+        writefile(ALIAS_FILE, table.concat(al,"\n"))
+    end)
+end
+loadLearned()
+
+local WORD_ALIAS = {
+    favourite="favorite",fav="favorite",favorites="favorite",
+    colour="color",colours="color",colors="color",
+    whats="what is",["what's"]="what is",whos="who is",["who's"]="who is",
+    wheres="where is",whens="when is",u="you",ur="your",pls="",please="",
+    ["sammy's"]="sammys",["i'm"]="i am",
+}
+local FILLERS = {
+    "what is","what are","what was","what do","what does",
+    "who is","who was","who are","when is","when was","where is",
+    "how old","how many","how much","do you know","can you tell me",
+    "tell me","i need","give me","answer me","say","type","write",
+    "the answer to","question","am i","do i","did i","is my","is the","is a",
+}
+local NUMWORDS = {first=1,second=2,third=3,fourth=4,fifth=5,sixth=6,seventh=7,eighth=8,
+    ninth=9,tenth=10,eleventh=11,twelfth=12,thirteenth=13,fourteenth=14}
+local CARDINALS = {one=1,two=2,three=3,four=4,five=5,six=6,seven=7,eight=8,nine=9,ten=10,
+    eleven=11,twelve=12,thirteen=13,fourteen=14,fifteen=15,sixteen=16,seventeen=17,eighteen=18}
+
+local function trim(s) return (tostring(s or ""):gsub("^%s+",""):gsub("%s+$","")) end
+local function basicClean(s)
+    s = tostring(s or ""):lower():gsub("[%?%!%.%,%;%:\"'`]"," "):gsub("%s+"," ")
+    return trim(s)
+end
+local function upperClean(s)
+    return (tostring(s or ""):upper():gsub("%s+",""):gsub("[%?%.%,!\"'`\n\r]",""))
+end
+local function ordinal(n)
+    return ({[1]="1st",[2]="2nd",[3]="3rd"})[n] or (tostring(n).."th")
+end
+local function applyAliases(s)
+    local out = {}
+    for word in s:gmatch("%S+") do
+        local sw = WORD_ALIAS[word]
+        if sw ~= nil then if sw ~= "" then out[#out+1]=sw end
+        else out[#out+1]=word end
+    end
+    return table.concat(out," ")
+end
+local function stripFillers(s)
+    local out = " "..s.." "
+    for _,f in ipairs(FILLERS) do
+        out = out:gsub("%s"..f:gsub("%%","%%%%").."%s"," ")
+    end
+    out = out:gsub("%s+my%s+"," "):gsub("^%s*my%s+"," ")
+    out = out:gsub("%s+sammys?%s+"," "):gsub("^%s*sammys?%s+"," ")
+    out = out:gsub("%s+the%s+"," "):gsub("%s+of%s+"," "):gsub("%s+for%s+"," ")
+    out = out:gsub("%s+a%s+"," "):gsub("%s+an%s+"," "):gsub("%s+in%s+"," ")
+    out = out:gsub("%s+i%s+"," "):gsub("%s+is%s+"," "):gsub("%s+was%s+"," ")
+    return trim((out:gsub("%s+"," ")))
+end
+local function toDigits(s)
+    local conv = s
+    for word,n in pairs(NUMWORDS) do
+        conv = conv:gsub("%f[%a]"..word.."%f[%A]", ordinal(n))
+    end
+    for word,n in pairs(CARDINALS) do
+        conv = conv:gsub("%f[%a]"..word.."%f[%A]", tostring(n))
+    end
+    return conv
+end
+local function multiplierOf(text)
+    local l = text:lower()
+    if l:find("twice") then return 2 end
+    if l:find("thrice") then return 3 end
+    local n = tonumber(l:match("(%d+)%s*times"))
+    if n and n>=2 and n<=10 then return n end
+    for word,value in pairs(CARDINALS) do
+        if value>=2 and value<=10 and l:find("%f[%a]"..word.."%s+times") then return value end
+    end
+    return nil
+end
+local function stripMultiplier(text)
+    local s = text
+    s = s:gsub("%s*%d+%s*times%s*"," ")
+    s = s:gsub("%s*twice%s*"," ")
+    s = s:gsub("%s*thrice%s*"," ")
+    for word,value in pairs(CARDINALS) do
+        if value>=2 and value<=10 then s = s:gsub("%s*"..word.."%s+times%s*"," ") end
+    end
+    return trim(s) ~= "" and s or text
+end
+
+local PROTECTED = {["black and white"]="\1bw\1"}
+local UNPROTECT = {["\1bw\1"]="black and white"}
+local function splitQuestions(text)
+    local s = " "..tostring(text or ""):lower().." "
+    for phrase,tok in pairs(PROTECTED) do s = s:gsub(phrase,tok) end
+    s = s:gsub("%s*[%?%;%,]%s*"," and ")
+    s = s:gsub("%s*&%s*"," and "):gsub("%s*%+%s*"," and ")
+    s = " "..basicClean(s).." "
+    s = s:gsub("%s+add%s+"," and "):gsub("%s+plus%s+"," and "):gsub("%s+then%s+"," and ")
+    local parts = {}
+    for part in (s.." and "):gmatch("(.-)%s+and%s+") do
+        part = trim(part)
+        if part ~= "" then
+            for tok,ph in pairs(UNPROTECT) do part = part:gsub(tok,ph) end
+            parts[#parts+1]=part
+        end
+    end
+    if #parts==0 then parts[1]=trim(basicClean(text)) end
+    return parts
+end
+
+local function findRarestExist()
+    local minVal, names = math.huge, {}
+    for key, val in pairs(EXIST_DB) do
+        local num = tonumber(val:gsub("[^%d]",""))
+        if num and num>0 and num<minVal then minVal=num; names={key}
+        elseif num and num>0 and num==minVal then names[#names+1]=key end
+    end
+    if #names==0 then return nil end
+    local out = {}
+    for _,n in ipairs(names) do out[#out+1]=n:upper() end
+    return table.concat(out,"AND")
+end
+local function cleanBrainrotName(raw)
+    if not raw then return nil end
+    raw = raw:gsub("%s+$","")
+    for _,w in ipairs({"exist","exists","is","are","in","of","have","has"}) do
+        raw = raw:gsub("%s+"..w.."$","")
+    end
+    return raw:gsub("%s+$",""):gsub("%s+","")
+end
+local function tryExistLookup(phrase)
+    local lower = phrase:lower()
+    if lower:find("rarest exist") then
+        local r = findRarestExist(); if r then return r end; return nil
+    end
+    local patterns = {
+        "what's the exist count of ","what is the exist count of ","exist count of ",
+        "how many exist of ","how many ","how much does ","how much ",
+        "exist of ","count of ","how many exist ","exist count ",
+    }
+    for _, pat in ipairs(patterns) do
+        local sp = lower:find(pat,1,true)
+        if sp then
+            local raw = lower:sub(sp+#pat):match("^[%w%s]+")
+            if raw then
+                local key = cleanBrainrotName(raw)
+                local c = EXIST_DB[key]
+                if c then return (c:gsub("[^%w]","")) end
+                return nil
+            end
+        end
+    end
+    return nil
+end
+local function dynamicAnswer(text)
+    local q = basicClean(text):gsub("^the%s+",""):gsub("^my%s+","")
+    local now = os.date("*t")
+    if q=="today" or q=="today date" or q=="todays date" or q=="current date" or q=="date today" then
+        return MONTHS_UP[now.month]..tostring(now.day)..tostring(now.year)
+    end
+    if q=="today day of week" or q=="what day is it" or q=="current day" then
+        return DAYS_UP[now.wday]
+    end
+    if q=="today day of month" or q=="day of month" or q=="today date of the month"
+        or q=="date of the month" then
+        return tostring(now.day)
+    end
+    if q=="current month" or q=="this month" then return MONTHS_UP[now.month] end
+    if q=="current year" or q=="this year" then return tostring(now.year) end
+    return nil
+end
+
+local tryMultiplierPreview
+do
+    local MUT_DB = {
+        ["gold"]=1.25, ["diamond"]=1.5, ["bloodrot"]=2, ["candy"]=4,
+        ["lava"]=6, ["galaxy"]=7, ["yinyang"]=7.5, ["radioactive"]=8.5,
+        ["cursed"]=9, ["rainbow"]=10, ["divine"]=10, ["cyber"]=11,
+        ["phantom"]=12, ["crystal"]=13,
+    }
+    local function parseMoneyStr(s)
+        if type(s) ~= "string" then return nil end
+        return tonumber(s:gsub("[^%d%.]",""))
+    end
+    local function fmtMoney(n)
+        if n == math.floor(n) then
+            local s = tostring(math.floor(n))
+            s = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+            return (s:gsub("^,",""))
+        else
+            local str = string.format("%.2f", n)
+            local int, dec = str:match("^(%d+)%.(%d+)$")
+            if int then
+                int = int:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,","")
+                return int.."."..dec
+            end
+            return str
+        end
+    end
+    tryMultiplierPreview = function(text)
+        if not text or text == "" then return nil end
+        local q = basicClean(text)
+        for _ = 1, 3 do
+            local before = q
+            q = q:gsub("^what is%s+",""):gsub("^whats%s+","")
+                 :gsub("^how much does%s+",""):gsub("^how much is%s+","")
+                 :gsub("^how many%s+","")
+                 :gsub("^the%s+",""):gsub("^an?%s+","")
+            if q == before then break end
+        end
+        local kind, head
+        local a, b = q:match("^(income)%s+of%s+(.+)$")
+        if a then kind, head = "income", b end
+        if not kind then
+            a, b = q:match("^(price)%s+of%s+(.+)$")
+            if a then kind, head = "price", b end
+        end
+        if not kind then
+            a, b = q:match("^(cost)%s+of%s+(.+)$")
+            if a then kind, head = "price", b end
+        end
+        if not kind then
+            a = q:match("^(.+)%s+income%s*per%s*second$")
+            if a then kind, head = "income", a end
+        end
+        if not kind then
+            a = q:match("^(.+)%s+income$")
+            if a then kind, head = "income", a end
+        end
+        if not kind then
+            a = q:match("^(.+)%s+price$")
+            if a then kind, head = "price", a end
+        end
+        if not kind then
+            a = q:match("^(.+)%s+cost$")
+            if a then kind, head = "price", a end
+        end
+        if not kind then return nil end
+        head = trim(head or "")
+        if head == "" then return nil end
+        local tokens = {}
+        for w in head:gmatch("%S+") do tokens[#tokens+1] = w end
+        local mutations, nameTokens, seen = {}, {}, {}
+        for _, w in ipairs(tokens) do
+            local key = WORD_ALIAS[w] or w
+            if MUT_DB[key] and not seen[key] then
+                mutations[#mutations+1] = key
+                seen[key] = true
+            else
+                nameTokens[#nameTokens+1] = w
+            end
+        end
+        if #mutations == 0 or #nameTokens == 0 then return nil end
+        local base = nil
+        for len = #nameTokens, 1, -1 do
+            local tryName = table.concat(nameTokens, " ", 1, len)
+            local key = kind == "income" and (tryName.." income")
+                                        or (tryName.." price")
+            if SAB_DB[key] then
+                base = parseMoneyStr(SAB_DB[key])
+                if base then break end
+            end
+        end
+        if not base then return nil end
+        local mult = 1
+        for _, mm in ipairs(mutations) do mult = mult * MUT_DB[mm] end
+        local out = fmtMoney(base * mult)
+        return kind == "income" and ("$"..out.."/s") or ("$"..out)
+    end
+end
+
+local function localAnswer(text)
+    if not text or text == "" then return nil end
+    local dyn = dynamicAnswer(text); if dyn then return dyn end
+    local mp = tryMultiplierPreview(text); if mp then return mp end
+    local ex = tryExistLookup(text); if ex then return ex end
+    local raw = basicClean(text)
+    local aliased = applyAliases(raw)
+    local core = stripFillers(aliased)
+    local candidates = {raw, aliased, core}
+    local base = #candidates
+    for i=1,base do
+        local conv = toDigits(candidates[i])
+        if conv ~= candidates[i] then candidates[#candidates+1]=conv end
+    end
+    for _,k in ipairs(candidates) do
+        k = trim(k)
+        if k~="" and SAB_DB[k] then return SAB_DB[k] end
+    end
+    return nil
+end
+
+local function simpleLookup(text)
+    if not text or text == "" then return nil end
+    local raw = basicClean(text)
+    local aliased = applyAliases(raw)
+    local core = stripFillers(aliased)
+    local candidates = {raw, aliased, core}
+    local base = #candidates
+    for i=1,base do
+        local conv = toDigits(candidates[i])
+        if conv ~= candidates[i] then candidates[#candidates+1]=conv end
+    end
+    for _,k in ipairs(candidates) do
+        k = trim(k)
+        if k~="" and SAB_DB[k] then return SAB_DB[k] end
+    end
+    return nil
+end
+
+local function trySubSplit(part)
+    if not part or part == "" then return nil end
+    local tokens = {}
+    for w in part:gmatch("%S+") do tokens[#tokens+1] = w end
+    local n = #tokens
+    if n < 2 then return nil end
+    for i = 1, n - 1 do
+        local a = table.concat(tokens, " ", 1, i)
+        local b = table.concat(tokens, " ", i + 1, n)
+        if localAnswer(a) and localAnswer(b) then return {a, b} end
+    end
+    return nil
+end
+
+local function fuzzyResolvePhrase(part)
+    if not part or part == "" then return nil end
+    local baseClean = basicClean(part)
+    if baseClean == "" then return nil end
+    local tokens = {}
+    for w in baseClean:gmatch("%S+") do tokens[#tokens+1] = w end
+    local n = #tokens
+    if n == 0 or n > 80 then return nil end
+    local answers = {}
+    local matchedTokens = 0
+    local i = 1
+    while i <= n do
+        local matched = false
+        local maxLen = math.min(n - i + 1, 8)
+        for len = maxLen, 1, -1 do
+            local candidate = table.concat(tokens, " ", i, i + len - 1)
+            local ans = simpleLookup(candidate)
+            if not ans then ans = tryMultiplierPreview(candidate) end
+            if not ans then ans = dynamicAnswer(candidate) end
+            if ans and ans ~= "" then
+                local up = upperClean(ans)
+                if up ~= "" then
+                    answers[#answers+1] = up
+                    matchedTokens = matchedTokens + len
+                    i = i + len
+                    matched = true
+                    break
+                end
+            end
+        end
+        if not matched then i = i + 1 end
+    end
+    if #answers == 0 then return nil end
+    return answers, matchedTokens, n
+end
+
+local function resolvePart(part, allowMul)
+    if not part or part=="" then return nil end
+    local times = allowMul and multiplierOf(part) or nil
+    local q = allowMul and stripMultiplier(part) or part
+    q = trim(q)
+    if q=="" then return nil end
+    local onlyNum = q:match("^%d+$")
+    if onlyNum then return times and string.rep(onlyNum,times) or onlyNum end
+    local ans = localAnswer(q)
+    if not ans then return nil end
+    local clean = upperClean(ans)
+    if clean=="" then return nil end
+    return times and string.rep(clean,times) or clean
+end
+
+local function solveRiddle(text)
+    if not text or text=="" then return nil,nil,"empty" end
+    local parts = splitQuestions(text)
+    local answers, breakdown = {}, {}
+    local missing = 0
+    for _, part in ipairs(parts) do
+        local ok, result = pcall(resolvePart, part, cfg.multiplier)
+        if ok and result and result~="" then
+            answers[#answers+1]=result
+            breakdown[#breakdown+1]=part:sub(1,30).." = "..result
+        else
+            local fz, matched, total
+            pcall(function() fz, matched, total = fuzzyResolvePhrase(part) end)
+            if fz and #fz > 0 then
+                for _, a in ipairs(fz) do answers[#answers+1] = a end
+                if matched and total and matched < total then
+                    breakdown[#breakdown+1] = "fuzzy("..matched.."/"..total.."): "
+                        ..table.concat(fz,"+")
+                else
+                    breakdown[#breakdown+1] = "fuzzy: "..table.concat(fz,"+")
+                end
+            else
+                local subs = trySubSplit(part)
+                if subs then
+                    local okAll = true
+                    local tmp = {}
+                    for _, sub in ipairs(subs) do
+                        local sr = resolvePart(sub, cfg.multiplier)
+                        if not sr or sr == "" then okAll=false; break end
+                        tmp[#tmp+1] = {q=sub, a=sr}
+                    end
+                    if okAll then
+                        for _, t in ipairs(tmp) do
+                            answers[#answers+1] = t.a
+                            breakdown[#breakdown+1] = "  "..t.q:sub(1,26).." = "..t.a
+                        end
+                    else
+                        missing = missing + 1
+                        breakdown[#breakdown+1]=part:sub(1,30).." = ?"
+                    end
+                else
+                    missing = missing + 1
+                    breakdown[#breakdown+1]=part:sub(1,30).." = ?"
+                end
+            end
+        end
+    end
+    if #answers == 0 then
+        local fz, matched, total
+        pcall(function() fz, matched, total = fuzzyResolvePhrase(text) end)
+        if fz and #fz > 0 then
+            for _, a in ipairs(fz) do answers[#answers+1] = a end
+            breakdown[#breakdown+1] = "fuzzy(whole "
+                ..tostring(matched or "?").."/"..tostring(total or "?").."): "
+                ..table.concat(fz,"+")
+            missing = 0
+        end
+    end
+    if #answers==0 then return nil, breakdown, "not in database" end
+    local deduped = {}
+    for _, a in ipairs(answers) do
+        if #deduped == 0 or deduped[#deduped] ~= a then
+            deduped[#deduped+1] = a
+        end
+    end
+    return table.concat(deduped,""), breakdown,
+        (missing>0) and (missing.." part(s) missing") or nil
+end
+
+local ORD_GROUPS = {
+    {"1st","first","1"},{"2nd","second","2"},{"3rd","third","3"},
+    {"4th","fourth","4"},{"5th","fifth","5"},{"6th","sixth","6"},
+    {"7th","seventh","7"},{"8th","eighth","8"},{"9th","ninth","9"},
+    {"10th","tenth","10"},{"11th","eleventh","11"},{"12th","twelfth","12"},
+    {"13th","thirteenth","13"},{"14th","fourteenth","14"},
+}
+local function wordBound(t,w) return t:find("%f[%a]"..w.."%f[%A]") ~= nil end
+local function replaceOnce(t,f,to) return (t:gsub("%f[%a]"..f.."%f[%A]", to, 1)) end
+local function generateAliases(q)
+    q = q:lower():gsub("^%s+",""):gsub("%s+$","")
+    if q=="" then return {} end
+    local out, seen = {}, {[q]=true}
+    local function add(a)
+        if not a then return end
+        a = a:gsub("^%s+",""):gsub("%s+$",""):gsub("%s+"," ")
+        if a=="" or #a>60 or seen[a] then return end
+        seen[a]=true; out[#out+1]=a
+    end
+    local ordHit
+    for _, grp in ipairs(ORD_GROUPS) do
+        for _, o in ipairs(grp) do
+            if wordBound(q,o) then ordHit={grp=grp,word=o}; break end
+        end
+        if ordHit then break end
+    end
+    if ordHit then
+        for _, alt in ipairs(ordHit.grp) do
+            if alt ~= ordHit.word then
+                add(replaceOnce(q, ordHit.word, alt))
+                add(replaceOnce(q, ordHit.word, "the "..alt))
+            end
+        end
+    end
+    local intent, subj = q:match("^what%s+(%a+)%s+is%s+(.+)$")
+    if intent then
+        add(intent.." of "..subj)
+        add(subj.." "..intent)
+    end
+    if q:find("whats",1,true) then add((q:gsub("whats","what is",1))) end
+    if q:find("what is",1,true) then add((q:gsub("what is","whats",1))) end
+    while #out>20 do table.remove(out) end
+    return out
+end
+
+local function splitTeachQuestion(q)
+    local tmp = q:lower()
+    tmp = tmp:gsub("%s*,%s*", " and ")
+    tmp = tmp:gsub("%s+then%s+", " and ")
+    tmp = tmp:gsub("%s+and%s+", "\1")
+    local parts = {}
+    for p in tmp:gmatch("[^\1]+") do
+        p = trim(p)
+        if p ~= "" then parts[#parts+1] = p end
+    end
+    return parts
+end
+
+local function teachRiddle(question, answers)
+    if not question or question=="" or not answers or #answers==0 then return false end
+    local q = trim(question):lower()
+    local cleaned = {}
+    for _, a in ipairs(answers) do
+        local up = upperClean(a)
+        if up ~= "" then cleaned[#cleaned+1]=up end
+    end
+    if #cleaned==0 then return false end
+    local qparts = splitTeachQuestion(q)
+    if #qparts >= 2 and #cleaned == #qparts then
+        for i = 1, #qparts do
+            local subQ = trim(qparts[i]):lower()
+            local subA = cleaned[i]
+            if subQ ~= "" and not SAB_DB[subQ] then
+                SAB_DB[subQ] = subA
+                learnedRiddles[subQ] = subA
+                for _, al in ipairs(generateAliases(subQ)) do
+                    if not SAB_DB[al] then
+                        SAB_DB[al] = subA
+                        learnedRiddles[al] = subA
+                        aliasMeta[al] = subQ
+                    end
+                end
+            end
+        end
+        local composite = table.concat(cleaned)
+        learnedRiddles[q] = composite
+        SAB_DB[q] = composite
+        for _, al in ipairs(generateAliases(q)) do
+            if not SAB_DB[al] then
+                SAB_DB[al] = composite
+                learnedRiddles[al] = composite
+                aliasMeta[al] = q
+            end
+        end
+        saveLearned()
+        return true
+    end
+    learnedRiddles[q]=cleaned[1]; SAB_DB[q]=cleaned[1]
+    if #cleaned>1 then
+        learnedAlternatives[q]={}
+        for i=2,#cleaned do learnedAlternatives[q][#learnedAlternatives[q]+1]=cleaned[i] end
+    end
+    for _, al in ipairs(generateAliases(q)) do
+        if not SAB_DB[al] then
+            SAB_DB[al]=cleaned[1]
+            learnedRiddles[al]=cleaned[1]
+            aliasMeta[al]=q
+        end
+    end
+    saveLearned()
+    return true
+end
+
+local function forgetRiddle(q)
+    q = q:lower()
+    if not learnedRiddles[q] then return false end
+    local toKill = {q}
+    for a,s in pairs(aliasMeta) do if s==q then toKill[#toKill+1]=a end end
+    for _, k in ipairs(toKill) do
+        SAB_DB[k]=nil; learnedRiddles[k]=nil; aliasMeta[k]=nil; learnedAlternatives[k]=nil
+    end
+    saveLearned()
+    return true
+end
+_G.addRiddle = function(q,a) return teachRiddle(q,{a}) end
+_G.removeRiddle = forgetRiddle
+
+local capturedRedeemRemote = nil
+local redeemInProgress = false
+local cachedBox, cachedBtn
+
+local function installRedeemHook()
+    if capturedRedeemRemote then return end
+    local mt = getrawmetatable and getrawmetatable(game)
+    if not mt or not mt.__namecall then return end
+    local old = mt.__namecall
+    if setreadonly then pcall(setreadonly, mt, false) end
+    mt.__namecall = newcclosure(function(self, ...)
+        local m = getnamecallmethod and getnamecallmethod()
+        
+        if m == "FireServer" and redeemInProgress and not capturedRedeemRemote then
+            if typeof(self) == "Instance" and self:IsA("RemoteEvent") then
+                local isString = false
+                for _, a in ipairs({...}) do
+                    if type(a) == "string" and #a >= 1 then isString = true; break end
+                end
+                
+                if isString then
+                    capturedRedeemRemote = self
+                end
+            end
+        end
+        
+        return old(self, ...)
+    end)
+    if setreadonly then pcall(setreadonly, mt, true) end
+end
+
+local function isOurGui(inst)
+    local p = inst
+    for _=1,10 do
+        if not p then break end
+        if p.Name=="LarpSourcesGui" or p.Name=="LarpSourcesLogs" or p.Name=="LarpSourcesLearn"
+            or p.Name=="LarpSourcesWelcome" or p.Name=="LarpSourcesPreview" then return true end
+        p = p.Parent
+    end
+    return false
+end
+local function isVisibleChain(inst)
+    local c = inst
+    while c do
+        local success, isGui = pcall(function() return c:IsA("GuiObject") end)
+        if success and isGui then
+            local success2, vis = pcall(function() return c.Visible end)
+            if success2 and not vis then return false end
+        end
+        
+        local success3, isScreen = pcall(function() return c:IsA("ScreenGui") end)
+        if success3 and isScreen then
+            local success4, en = pcall(function() return c.Enabled end)
+            return success4 and en
+        end
+        c = c.Parent
+    end
+    return true
+end
+
+local function clearBooleans(fn, depth)
+    if not (fn and setupvalue and getupvalues) then return end
+    depth = depth or 1
+    local ok, ups = pcall(getupvalues, fn)
+    if ok and type(ups) == "table" then
+        for k, v in pairs(ups) do
+            if type(v) == "boolean" then
+                pcall(setupvalue, fn, k, false)
+            elseif type(v) == "function" and depth > 0 then
+                clearBooleans(v, depth - 1)
+            end
+        end
+    end
+end
+
+local function fireConns(sig, ...)
+    if typeof(getconns) ~= "function" then return false end
+    local ok, cs = pcall(getconns, sig)
+    if not ok or type(cs) ~= "table" then return false end
+    local args = table.pack(...)
+    local fired = false
+    for _, c in ipairs(cs) do
+        local ok2 = pcall(function()
+            if c.Enabled ~= false then
+                local cb
+                pcall(function() cb = c.Function end)
+                clearBooleans(cb)
+                
+                if cb then
+                    pcall(task.spawn, cb, table.unpack(args,1,args.n))
+                else
+                    pcall(function() c:Fire(table.unpack(args,1,args.n)) end)
+                end
+            end
+        end)
+        fired = fired or ok2
+    end
+    return fired
+end
+
+local function clickButton(btn)
+    if not btn then return false end
+    pcall(function() btn.MouseButton1Click:Fire() end)
+    pcall(function() btn.Activated:Fire() end)
+    if typeof(firesignal) == "function" then
+        pcall(firesignal, btn.MouseButton1Click)
+        pcall(firesignal, btn.Activated)
+    end
+    fireConns(btn.MouseButton1Click)
+    fireConns(btn.Activated)
+    if typeof(fireclick) == "function" then
+        pcall(fireclick, btn)
+    end
+    return true
+end
+local function fireBoxFocusLost(box)
+    if not box then return false end
+    if typeof(firesignal) == "function" then
+        pcall(firesignal, box.FocusLost, true)
+    end
+    if typeof(getconns) == "function" then
+        local ok, cs = pcall(getconns, box.FocusLost)
+        if ok and type(cs) == "table" then
+            for _, c in ipairs(cs) do
+                pcall(function() if c.Enabled ~= false then c:Fire(true) end end)
+            end
+        end
+    end
+    return true
+end
+local function invalidateCache() cachedBox=nil; cachedBtn=nil end
+local function cacheValid()
+    if not cachedBox or not cachedBox.Parent or not isVisibleChain(cachedBox) then return false end
+    if cachedBtn and (not cachedBtn.Parent or not isVisibleChain(cachedBtn)) then return false end
+    return true
+end
+
+local function forceOpenCodesGui()
+    local pg = PlayerGui or LP:FindFirstChildOfClass("PlayerGui")
+    if not pg then return end
+    local codes = pg:FindFirstChild("Codes")
+    if not codes then return end
+    if codes:IsA("ScreenGui") then codes.Enabled = true end
+    local node = codes:FindFirstChild("Codes") or codes
+    local cur = node
+    for _ = 1, 12 do
+        if not cur or cur == codes.Parent then break end
+        if cur:IsA("GuiObject") then cur.Visible = true end
+        cur = cur.Parent
+    end
+end
+
+local function findAndCacheUI()
+    if cacheValid() then return true end
+    invalidateCache()
+    forceOpenCodesGui()
+    local pg = PlayerGui or LP:FindFirstChildOfClass("PlayerGui")
+    if not pg then return false end
+    local codes = pg:FindFirstChild("Codes")
+    local roots = {}
+    if codes then roots[#roots+1] = codes end
+    roots[#roots+1] = pg
+    for _, root in ipairs(roots) do
+        for _, d in ipairs(root:GetDescendants()) do
+            if d:IsA("TextBox") and not isOurGui(d) then
+                local n = d.Name:lower()
+                local pn = (d.Parent and d.Parent.Name or ""):lower()
+                if n:find("code") or pn:find("code") or n:find("input")
+                    or n:find("redeem") or pn:find("redeem") or n:find("textbox") then
+                    if isVisibleChain(d) or (codes and d:IsDescendantOf(codes)) then
+                        cachedBox = d; break
+                    end
+                end
+            end
+        end
+        if cachedBox then break end
+    end
+    if not cachedBox then
+        for _, d in ipairs(pg:GetDescendants()) do
+            if d:IsA("TextBox") and not isOurGui(d) and isVisibleChain(d) then
+                cachedBox = d; break
+            end
+        end
+    end
+    if not cachedBox then return false end
+    local node = cachedBox.Parent
+    for _ = 1, 8 do
+        if not node then break end
+        for _, d in ipairs(node:GetDescendants()) do
+            if (d:IsA("TextButton") or d:IsA("ImageButton")) and not isOurGui(d) and d ~= cachedBox then
+                local n = d.Name:lower()
+                local t = ""; pcall(function() t = d.Text:lower() end)
+                if n:find("submit") or t:find("submit") or n:find("redeem") or t:find("redeem")
+                    or n:find("claim") or t:find("claim") or n:find("confirm") or t:find("confirm")
+                    or n:find("enter") or t:find("enter") then
+                    if isVisibleChain(d) or (codes and d:IsDescendantOf(codes)) then
+                        cachedBtn = d; break
+                    end
+                end
+            end
+        end
+        if cachedBtn then break end
+        node = node.Parent
+    end
+    return true
+end
+
+local function fastRedeem(code)
+    code = tostring(code or "")
+    if code == "" then return end
+
+    redeemInProgress = true
+
+    if capturedRedeemRemote then
+        pcall(function() capturedRedeemRemote:FireServer(code) end)
+    end
+
+    if not cachedBox then
+        findAndCacheUI()
+        task.wait(0.15)
+        findAndCacheUI()
+    end
+
+    task.spawn(function()
+        for i = 1, 5 do
+            if cachedBox then
+                pcall(function() cachedBox.Text = "" end)
+                pcall(function() cachedBox.Text = code end)
+            end
+            if cachedBtn then
+                clickButton(cachedBtn)
+                fireBoxFocusLost(cachedBox)
+            elseif cachedBox then
+                fireBoxFocusLost(cachedBox)
+            end
+            task.wait(0.05)
+        end
+        task.delay(0.5, function() redeemInProgress = false end)
+    end)
+end
+
+local logLines, MAX_LOG_LINES = {}, 200
+local LogContainer
+local solvedCount, askedCount = 0, 0
+local solveLabel
+local statusBar
+local capturedParts = {}
+local baseThreshold = cfg.submitAfter
+local updateStatusBar = function() end
+local sniperBtn, sniperBg, sniperKnob
+local LogsFrame
+local LearnFrame
+local codeTriggerArmed = false
+
+local function addLog(text, color)
+    color = color or C.Muted
+    logLines[#logLines+1] = {text=tostring(text), color=color}
+    if #logLines > MAX_LOG_LINES then table.remove(logLines, 1) end
+    if not LogContainer then return end
+    pcall(function()
+        for _, c in ipairs(LogContainer:GetChildren()) do
+            if c:IsA("TextLabel") then c:Destroy() end
+        end
+        for i, line in ipairs(logLines) do
+            local l = Instance.new("TextLabel")
+            l.BackgroundTransparency=1
+            l.Size = UDim2.new(1,-10,0,14)
+            l.Position = UDim2.new(0,5,0,(i-1)*15)
+            l.Font = Enum.Font.Gotham; l.TextSize=10
+            l.TextColor3 = line.color
+            l.TextXAlignment = Enum.TextXAlignment.Left
+            l.Text = line.text
+            l.Parent = LogContainer
+        end
+    end)
+end
+local function bumpSolved()
+    if solveLabel then solveLabel.Text = solvedCount.." solved / "..askedCount.." asked" end
+end
+
+local grads, conns = {}, {}
+local function round(i,r)
+    if not i then return end
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,r or 8); c.Parent = i
+    return c
+end
+local function animStroke(parent, thick, c1, c2, tr, speed)
+    c1 = c1 or C.Stroke or C.Accent
+    c2 = c2 or C.AccentHi or C.Accent
+    local s = Instance.new("UIStroke")
+    s.Color=c1; s.Thickness=thick or 1.5; s.Transparency=tr or 0.2
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border; s.Parent = parent
+    local g = Instance.new("UIGradient")
+    g.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0,c1),
+        ColorSequenceKeypoint.new(0.3,c2),
+        ColorSequenceKeypoint.new(0.6,c1),
+        ColorSequenceKeypoint.new(0.8,C.White),
+        ColorSequenceKeypoint.new(1,c1),
+    })
+    g.Parent = s
+    grads[#grads+1] = g
+    local conn = RunService.Heartbeat:Connect(function()
+        if not g or not g.Parent then conn:Disconnect(); return end
+        g.Rotation = (g.Rotation + (speed or 55)*0.016) % 360
+    end)
+    conns[#conns+1] = conn
+    return s, g
+end
+local function toggleVisual(on, bg, knob)
+    if not bg or not knob then return end
+    if on then
+        TweenService:Create(bg, TweenInfo.new(0.18), {BackgroundColor3 = C.AccentHi}):Play()
+        TweenService:Create(knob, TweenInfo.new(0.18),
+            {Position = UDim2.new(1,-16,0.5,-7), BackgroundColor3 = C.White}):Play()
+    else
+        TweenService:Create(bg, TweenInfo.new(0.18), {BackgroundColor3 = C.TrackOff}):Play()
+        TweenService:Create(knob, TweenInfo.new(0.18),
+            {Position = UDim2.new(0,2,0.5,-7), BackgroundColor3 = C.KnobOff}):Play()
+    end
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "LarpSourcesGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = PlayerGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 220, 0, 320)
+MainFrame.Position = UDim2.new(0.5, -110, 0.5, -160)
+MainFrame.BackgroundColor3 = C.Bg
+MainFrame.BackgroundTransparency = 0.08
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.ClipsDescendants = true
+MainFrame.Parent = ScreenGui
+round(MainFrame, 12)
+animStroke(MainFrame, 1.6, C.Stroke, C.AccentHi, 0.2, 55)
+
+local tabBar
+local ContentHolder -- Declare earlier to avoid nil upvalue
+do
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1,0,0,32)
+    header.BackgroundTransparency = 1
+    header.Parent = MainFrame
+
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.new(0,6,0,6)
+    dot.Position = UDim2.new(0,10,0,9)
+    dot.BackgroundColor3 = C.AccentHi
+    dot.BorderSizePixel = 0
+    dot.Parent = header
+    round(dot, 3)
+
+    local title = Instance.new("TextLabel")
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.new(0,22,0,3)
+    title.Size = UDim2.new(1,-50,0,12)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 11
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.TextColor3 = C.Text
+    title.Text = "Larp Sources"
+    title.Parent = header
+
+    local author = Instance.new("TextLabel")
+    author.BackgroundTransparency = 1
+    author.Position = UDim2.new(0,22,0,18)
+    author.Size = UDim2.new(0.4,0,0,10)
+    author.Font = Enum.Font.Gotham
+    author.TextSize = 7
+    author.TextXAlignment = Enum.TextXAlignment.Left
+    author.TextColor3 = C.Muted
+    author.Text = "made by larp and Ron"
+    author.Parent = header
+
+    statusBar = Instance.new("TextLabel")
+    statusBar.BackgroundTransparency = 1
+    statusBar.Position = UDim2.new(0.4,0,0,18)
+    statusBar.Size = UDim2.new(0.6,-24,0,10)
+    statusBar.Font = Enum.Font.GothamBold
+    statusBar.TextSize = 7
+    statusBar.TextXAlignment = Enum.TextXAlignment.Right
+    statusBar.TextColor3 = C.Green
+    statusBar.Text = "S 0/2 · AI 0/3"
+    statusBar.Parent = header
+
+    local minimizeBtn = Instance.new("TextButton")
+    minimizeBtn.Size = UDim2.new(0,16,0,16)
+    minimizeBtn.Position = UDim2.new(1,-20,0,7)
+    minimizeBtn.BackgroundColor3 = C.BgRow
+    minimizeBtn.BackgroundTransparency = 0.3
+    minimizeBtn.BorderSizePixel = 0
+    minimizeBtn.Text = "—"
+    minimizeBtn.TextColor3 = C.Text
+    minimizeBtn.Font = Enum.Font.GothamBold
+    minimizeBtn.TextSize = 12
+    minimizeBtn.AutoButtonColor = false
+    minimizeBtn.Parent = header
+    round(minimizeBtn, 4)
+    animStroke(minimizeBtn, 1, C.Stroke, C.Accent, 0.3, 35)
+
+    local minimized = false
+    minimizeBtn.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        if minimized then
+            MainFrame.Size = UDim2.new(0,220,0,32)
+            if tabBar then tabBar.Visible = false end
+            if ContentHolder then ContentHolder.Visible = false end
+            minimizeBtn.Text = "□"
+        else
+            MainFrame.Size = UDim2.new(0,220,0,320)
+            if tabBar then tabBar.Visible = true end
+            if ContentHolder then ContentHolder.Visible = true end
+            minimizeBtn.Text = "—"
+        end
+    end)
+end
+
+tabBar = Instance.new("Frame")
+tabBar.Size = UDim2.new(1,-16,0,22)
+tabBar.Position = UDim2.new(0,8,0,32)
+tabBar.BackgroundColor3 = C.BgRow
+tabBar.BackgroundTransparency = 0.3
+tabBar.BorderSizePixel = 0
+tabBar.Parent = MainFrame
+round(tabBar, 6)
+
+local tabButtons = {}
+do
+    local tabDefs = {"Redeemer","Riddle","Settings"}
+    for i, name in ipairs(tabDefs) do
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1/3,-2,1,0)
+        b.Position = UDim2.new((i-1)/3, i==1 and 2 or 0, 0, 0)
+        b.BackgroundColor3 = (i==1) and C.TabOn or C.TabOff
+        b.BackgroundTransparency = 0.2
+        b.BorderSizePixel = 0
+        b.Text = name
+        b.TextColor3 = (i==1) and C.White or C.Muted
+        b.Font = Enum.Font.GothamBold
+        b.TextSize = 9
+        b.AutoButtonColor = false
+        b.Parent = tabBar
+        round(b, 5)
+        tabButtons[name] = b
+    end
+end
+
+ContentHolder = Instance.new("Frame")
+ContentHolder.Size = UDim2.new(1,-16,1,-88)
+ContentHolder.Position = UDim2.new(0,8,0,58)
+ContentHolder.BackgroundTransparency = 1
+ContentHolder.Parent = MainFrame
+
+local function makePanel(name)
+    local p = Instance.new("Frame")
+    p.Name = name
+    p.Size = UDim2.new(1,0,1,0)
+    p.BackgroundTransparency = 1
+    p.Visible = false
+    p.Parent = ContentHolder
+    local ll = Instance.new("UIListLayout")
+    ll.FillDirection = Enum.FillDirection.Vertical
+    ll.Padding = UDim.new(0,5)
+    ll.SortOrder = Enum.SortOrder.LayoutOrder
+    ll.Parent = p
+    return p
+end
+local redeemerPanel = makePanel("Redeemer")
+local riddlePanel   = makePanel("Riddle")
+local settingsPanel = makePanel("Settings")
+
+local function makeRow(parent, order, labelText)
+    local r = Instance.new("Frame")
+    r.Size = UDim2.new(1,0,0,28)
+    r.BackgroundColor3 = C.BgRow
+    r.BackgroundTransparency = 0.4
+    r.BorderSizePixel = 0
+    r.LayoutOrder = order
+    r.Parent = parent
+    round(r, 7)
+    animStroke(r, 1.1, C.Stroke, C.Accent, 0.3, 45)
+    local l = Instance.new("TextLabel")
+    l.BackgroundTransparency = 1
+    l.Position = UDim2.new(0,8,0,0)
+    l.Size = UDim2.new(0.7,0,1,0)
+    l.Font = Enum.Font.GothamMedium
+    l.TextSize = 9
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.TextColor3 = C.Text
+    l.Text = labelText
+    l.Parent = r
+    return r
+end
+local function makeToggle(row)
+    local bg = Instance.new("Frame")
+    bg.Size = UDim2.new(0,28,0,14)
+    bg.Position = UDim2.new(1,-34,0.5,-7)
+    bg.BackgroundColor3 = C.TrackOff
+    bg.BorderSizePixel = 0
+    bg.Parent = row
+    round(bg, 7)
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0,10,0,10)
+    knob.Position = UDim2.new(0,2,0.5,-5)
+    knob.BackgroundColor3 = C.KnobOff
+    knob.BorderSizePixel = 0
+    knob.Parent = bg
+    round(knob, 5)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1,0,1,0)
+    btn.BackgroundTransparency = 1
+    btn.Text = ""
+    btn.Parent = bg
+    return btn, bg, knob
+end
+local function makeAction(parent, order, text, color, fn)
+    local r = Instance.new("Frame")
+    r.Size = UDim2.new(1,0,0,28)
+    r.BackgroundColor3 = C.BgRow
+    r.BackgroundTransparency = 0.4
+    r.BorderSizePixel = 0
+    r.LayoutOrder = order
+    r.Parent = parent
+    round(r, 7)
+    animStroke(r, 1.1, C.Stroke, C.Accent, 0.3, 45)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1,-6,1,-6)
+    b.Position = UDim2.new(0,3,0,3)
+    b.BackgroundColor3 = color
+    b.BackgroundTransparency = 0.15
+    b.BorderSizePixel = 0
+    b.Text = text
+    b.TextColor3 = C.White
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 10
+    b.Parent = r
+    round(b, 5)
+    b.MouseButton1Click:Connect(fn)
+    return r, b
+end
+
+do
+    local sniperRow = makeRow(redeemerPanel, 1, "Code Sniper")
+    sniperBtn, sniperBg, sniperKnob = makeToggle(sniperRow)
+
+    local statsRow = Instance.new("Frame")
+    statsRow.Size = UDim2.new(1,0,0,22)
+    statsRow.BackgroundColor3 = C.BgRow
+    statsRow.BackgroundTransparency = 0.3
+    statsRow.BorderSizePixel = 0
+    statsRow.LayoutOrder = 2
+    statsRow.Parent = redeemerPanel
+    round(statsRow, 7)
+    solveLabel = Instance.new("TextLabel")
+    solveLabel.BackgroundTransparency = 1
+    solveLabel.Size = UDim2.new(1,-10,1,0)
+    solveLabel.Position = UDim2.new(0,5,0,0)
+    solveLabel.Font = Enum.Font.Gotham
+    solveLabel.TextSize = 9
+    solveLabel.TextColor3 = C.Green
+    solveLabel.TextXAlignment = Enum.TextXAlignment.Center
+    solveLabel.Text = "0 solved / 0 asked"
+    solveLabel.Parent = statsRow
+
+    sniperBtn.MouseButton1Click:Connect(function()
+        cfg.codeSniper = not cfg.codeSniper; saveConfig()
+        toggleVisual(cfg.codeSniper, sniperBg, sniperKnob)
+        addLog("Code Sniper: "..(cfg.codeSniper and "ON" or "OFF"),
+            cfg.codeSniper and C.Green or C.Red)
+    end)
+end
+
+do
+    local riddleRow = makeRow(riddlePanel, 1, "AI Riddle Solver")
+    local riddleBtn, riddleBg, riddleKnob = makeToggle(riddleRow)
+
+    local multRow = makeRow(riddlePanel, 2, "Multiplier Parse")
+    local multBtn, multBg, multKnob = makeToggle(multRow)
+
+    makeAction(riddlePanel, 3, "Open Learn Panel", C.Learn, function()
+        if LearnFrame then LearnFrame.Visible = not LearnFrame.Visible end
+    end)
+
+    riddleBtn.MouseButton1Click:Connect(function()
+        cfg.riddleSolver = not cfg.riddleSolver; saveConfig()
+        toggleVisual(cfg.riddleSolver, riddleBg, riddleKnob)
+        addLog("AI Riddle: "..(cfg.riddleSolver and "ON" or "OFF"),
+            cfg.riddleSolver and C.Green or C.Red)
+    end)
+    multBtn.MouseButton1Click:Connect(function()
+        cfg.multiplier = not cfg.multiplier; saveConfig()
+        toggleVisual(cfg.multiplier, multBg, multKnob)
+        addLog("Multiplier: "..(cfg.multiplier and "ON" or "OFF"),
+            cfg.multiplier and C.Green or C.Red)
+    end)
+end
+
+do
+    local autoRow = makeRow(settingsPanel, 1, "Auto Submit")
+    local autoBtn, autoBg, autoKnob = makeToggle(autoRow)
+
+    local autoSnipeRow = makeRow(settingsPanel, 2, "Auto-Snipe 'code is'/'use code'")
+    local autoSnipeBtn, autoSnipeBg, autoSnipeKnob = makeToggle(autoSnipeRow)
+
+    local onlyAfterRow = makeRow(settingsPanel, 3, "Capture After 'Use Code'/'Code Is'")
+    local onlyAfterBtn, onlyAfterBg, onlyAfterKnob = makeToggle(onlyAfterRow)
+
+    local spamModeRow = makeRow(settingsPanel, 4, "Redeem on Every Word")
+    local spamModeBtn, spamModeBg, spamModeKnob = makeToggle(spamModeRow)
+
+    local afterRow = makeRow(settingsPanel, 5, "Submit After (Base)")
+    local minusBtn = Instance.new("TextButton")
+    minusBtn.Size = UDim2.new(0,18,0,18)
+    minusBtn.Position = UDim2.new(1,-60,0.5,-9)
+    minusBtn.BackgroundColor3 = C.BgRow
+    minusBtn.BackgroundTransparency = 0.3
+    minusBtn.BorderSizePixel = 0
+    minusBtn.Text = "−"
+    minusBtn.TextColor3 = C.Text
+    minusBtn.Font = Enum.Font.GothamBold
+    minusBtn.TextSize = 11
+    minusBtn.Parent = afterRow
+    round(minusBtn, 4)
+    local afterVal = Instance.new("TextLabel")
+    afterVal.Size = UDim2.new(0,22,0,18)
+    afterVal.Position = UDim2.new(1,-38,0.5,-9)
+    afterVal.BackgroundTransparency = 1
+    afterVal.Text = tostring(cfg.submitAfter)
+    afterVal.TextColor3 = C.Text
+    afterVal.Font = Enum.Font.GothamBold
+    afterVal.TextSize = 11
+    afterVal.Parent = afterRow
+    local plusBtn = Instance.new("TextButton")
+    plusBtn.Size = UDim2.new(0,18,0,18)
+    plusBtn.Position = UDim2.new(1,-18,0.5,-9)
+    plusBtn.BackgroundColor3 = C.Accent
+    plusBtn.BackgroundTransparency = 0.2
+    plusBtn.BorderSizePixel = 0
+    plusBtn.Text = "+"
+    plusBtn.TextColor3 = C.White
+    plusBtn.Font = Enum.Font.GothamBold
+    plusBtn.TextSize = 11
+    plusBtn.Parent = afterRow
+    round(plusBtn, 4)
+
+    local logsOpenBtn
+    local _, logsBtnInstance = makeAction(settingsPanel, 6, "Toggle Logs Window", C.Accent, function()
+        if not LogsFrame then return end
+        LogsFrame.Visible = not LogsFrame.Visible
+        if logsOpenBtn then
+            logsOpenBtn.Text = LogsFrame.Visible and "Hide Logs Window" or "Toggle Logs Window"
+        end
+    end)
+    logsOpenBtn = logsBtnInstance
+
+    makeAction(settingsPanel, 7, "Clear Logs", C.Red, function()
+        logLines = {}
+        addLog("Logs cleared", C.Muted)
+    end)
+
+    autoBtn.MouseButton1Click:Connect(function()
+        cfg.autoSubmit = not cfg.autoSubmit; saveConfig()
+        toggleVisual(cfg.autoSubmit, autoBg, autoKnob)
+        addLog("Auto Submit: "..(cfg.autoSubmit and "ON" or "OFF"),
+            cfg.autoSubmit and C.Green or C.Red)
+    end)
+    autoSnipeBtn.MouseButton1Click:Connect(function()
+        cfg.autoSnipeOnCodeIs = not cfg.autoSnipeOnCodeIs; saveConfig()
+        toggleVisual(cfg.autoSnipeOnCodeIs, autoSnipeBg, autoSnipeKnob)
+        addLog("Auto-Snipe 'code is'/'use code': "..(cfg.autoSnipeOnCodeIs and "ON" or "OFF"),
+            cfg.autoSnipeOnCodeIs and C.Green or C.Red)
+    end)
+    onlyAfterBtn.MouseButton1Click:Connect(function()
+        cfg.onlyAfterUseCode = not cfg.onlyAfterUseCode; saveConfig()
+        toggleVisual(cfg.onlyAfterUseCode, onlyAfterBg, onlyAfterKnob)
+        if not cfg.onlyAfterUseCode then codeTriggerArmed = false end
+        addLog("Capture After 'Use Code'/'Code Is': "..(cfg.onlyAfterUseCode and "ON" or "OFF"),
+            cfg.onlyAfterUseCode and C.Green or C.Red)
+    end)
+    spamModeBtn.MouseButton1Click:Connect(function()
+        cfg.spamMode = not cfg.spamMode; saveConfig()
+        toggleVisual(cfg.spamMode, spamModeBg, spamModeKnob)
+        addLog("Redeem on Every Word: "..(cfg.spamMode and "ON" or "OFF"),
+            cfg.spamMode and C.Green or C.Red)
+    end)
+    local function setSubmitAfter(v)
+        cfg.submitAfter = math.clamp(v, 1, 10); saveConfig()
+        baseThreshold = cfg.submitAfter
+        afterVal.Text = tostring(cfg.submitAfter)
+        updateStatusBar()
+    end
+    minusBtn.MouseButton1Click:Connect(function() setSubmitAfter(cfg.submitAfter - 1) end)
+    plusBtn.MouseButton1Click:Connect(function() setSubmitAfter(cfg.submitAfter + 1) end)
+    _G.__shOnlyAfterRefs = {bg=onlyAfterBg, knob=onlyAfterKnob}
+    _G.__shSpamModeRefs = {bg=spamModeBg, knob=spamModeKnob}
+end
+
+local function switchTab(name)
+    for tn, btn in pairs(tabButtons) do
+        if tn == name then
+            btn.BackgroundColor3 = C.TabOn; btn.TextColor3 = C.White
+        else
+            btn.BackgroundColor3 = C.TabOff; btn.TextColor3 = C.Muted
+        end
+    end
+    redeemerPanel.Visible = (name == "Redeemer")
+    riddlePanel.Visible   = (name == "Riddle")
+    settingsPanel.Visible = (name == "Settings")
+end
+for name, btn in pairs(tabButtons) do
+    btn.MouseButton1Click:Connect(function() switchTab(name) end)
+end
+switchTab("Redeemer")
+
+updateStatusBar = function()
+    if not statusBar then return end
+    statusBar.Text = string.format("S %d/%d · AI 0/%d",
+        #capturedParts, baseThreshold, cfg.submitAfter)
+end
+
+print("[LarpSources] main GUI built")
+
+local function buildLogsWindow()
+    local LogsGui = Instance.new("ScreenGui")
+    LogsGui.Name = "LarpSourcesLogs"
+    LogsGui.ResetOnSpawn = false
+    LogsGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    LogsGui.Parent = PlayerGui
+    LogsFrame = Instance.new("Frame")
+    local fullS = UDim2.new(0, 280, 0, 220)
+    local miniS = UDim2.new(0, 280, 0, 22)
+    LogsFrame.Size = fullS
+    LogsFrame.Position = UDim2.new(0.5, -400, 0.5, -110)
+    LogsFrame.BackgroundColor3 = C.Bg
+    LogsFrame.BackgroundTransparency = 0.08
+    LogsFrame.BorderSizePixel = 0
+    LogsFrame.ClipsDescendants = true
+    LogsFrame.Active = true
+    LogsFrame.Draggable = true
+    LogsFrame.Parent = LogsGui
+    round(LogsFrame, 12)
+    animStroke(LogsFrame, 1.4, C.Stroke, C.Accent, 0.2, 50)
+
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1,0,0,22)
+    header.BackgroundTransparency = 1
+    header.Parent = LogsFrame
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1,-70,0,18)
+    title.Position = UDim2.new(0,10,0,2)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 11
+    title.TextColor3 = C.Text
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Text = "Larp Sources Logs"
+    title.Parent = header
+
+    local minBtn = Instance.new("TextButton")
+    minBtn.Size = UDim2.new(0,18,0,18)
+    minBtn.Position = UDim2.new(1,-44,0,2)
+    minBtn.BackgroundColor3 = C.BgRow
+    minBtn.BackgroundTransparency = 0.4
+    minBtn.Text = "—"
+    minBtn.Font = Enum.Font.GothamBold
+    minBtn.TextSize = 11
+    minBtn.TextColor3 = C.Muted
+    minBtn.AutoButtonColor = false
+    minBtn.Parent = header
+    round(minBtn, 5)
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0,18,0,18)
+    closeBtn.Position = UDim2.new(1,-22,0,2)
+    closeBtn.BackgroundColor3 = C.BgRow
+    closeBtn.BackgroundTransparency = 0.4
+    closeBtn.Text = "X"
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 10
+    closeBtn.TextColor3 = C.Muted
+    closeBtn.AutoButtonColor = false
+    closeBtn.Parent = header
+    round(closeBtn, 5)
+    closeBtn.MouseButton1Click:Connect(function() LogsFrame.Visible = false end)
+
+    LogContainer = Instance.new("ScrollingFrame")
+    LogContainer.Size = UDim2.new(1,0,1,-22)
+    LogContainer.Position = UDim2.new(0,0,0,22)
+    LogContainer.BackgroundTransparency = 1
+    LogContainer.BorderSizePixel = 0
+    LogContainer.ScrollBarThickness = 3
+    LogContainer.ScrollBarImageColor3 = C.Accent
+    LogContainer.CanvasSize = UDim2.new(0,0,0,0)
+    LogContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    LogContainer.Parent = LogsFrame
+
+    local minimized = false
+    minBtn.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        if minimized then
+            LogsFrame.Size = miniS
+            LogContainer.Visible = false
+            minBtn.Text = "□"
+        else
+            LogsFrame.Size = fullS
+            LogContainer.Visible = true
+            minBtn.Text = "—"
+        end
+    end)
+end
+buildLogsWindow()
+
+local function findSimilarRiddles(query, limit)
+    if not query or query == "" then return {} end
+    local q = basicClean(query)
+    if q == "" then return {} end
+    local qWords = {}
+    for w in q:gmatch("%S+") do
+        if #w >= 2 then qWords[#qWords+1] = w end
+    end
+    local results = {}
+    for key, val in pairs(SAB_DB) do
+        if #key >= 3 and type(val) == "string" then
+            local kl = key:lower()
+            local score = 0
+            if kl:find(q, 1, true) then score = score + 12 end
+            if q:find(kl, 1, true) then score = score + 6 end
+            for _, w in ipairs(qWords) do
+                if kl:find(w, 1, true) then score = score + 2 end
+            end
+            if score > 0 then
+                results[#results+1] = {key=key, val=val, score=score}
+            end
+        end
+    end
+    table.sort(results, function(a,b) return a.score > b.score end)
+    while #results > limit do table.remove(results) end
+    return results
+end
+
+local learnSimilarList
+local function buildLearnWindow()
+    local LearnGui = Instance.new("ScreenGui")
+    LearnGui.Name = "LarpSourcesLearn"
+    LearnGui.ResetOnSpawn = false
+    LearnGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    LearnGui.Parent = PlayerGui
+    LearnFrame = Instance.new("Frame")
+    local fullS = UDim2.new(0, 190, 0, 209)
+    local miniS = UDim2.new(0, 190, 0, 22)
+    LearnFrame.Size = fullS
+    LearnFrame.Position = UDim2.new(0.5, 120, 0.5, -105)
+    LearnFrame.BackgroundColor3 = C.Bg
+    LearnFrame.BackgroundTransparency = 0.08
+    LearnFrame.BorderSizePixel = 0
+    LearnFrame.ClipsDescendants = true
+    LearnFrame.Active = true
+    LearnFrame.Draggable = true
+    LearnFrame.Parent = LearnGui
+    round(LearnFrame, 10)
+    animStroke(LearnFrame, 1.3, C.Learn, C.LearnHi, 0.2, 50)
+
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1,0,0,22)
+    header.BackgroundTransparency = 1
+    header.Parent = LearnFrame
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1,-44,0,18)
+    title.Position = UDim2.new(0,8,0,2)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 10
+    title.TextColor3 = C.LearnHi
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Text = "Teach a riddle"
+    title.Parent = header
+
+    local minBtn = Instance.new("TextButton")
+    minBtn.Size = UDim2.new(0,14,0,14)
+    minBtn.Position = UDim2.new(1,-34,0,4)
+    minBtn.BackgroundColor3 = C.BgRow
+    minBtn.BackgroundTransparency = 0.3
+    minBtn.BorderSizePixel = 0
+    minBtn.Text = "—"
+    minBtn.Font = Enum.Font.GothamBlack
+    minBtn.TextSize = 10
+    minBtn.TextColor3 = C.LearnHi
+    minBtn.AutoButtonColor = false
+    minBtn.Parent = header
+    round(minBtn, 3)
+
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0,14,0,14)
+    closeBtn.Position = UDim2.new(1,-18,0,4)
+    closeBtn.BackgroundColor3 = C.BgRow
+    closeBtn.BackgroundTransparency = 0.3
+    closeBtn.BorderSizePixel = 0
+    closeBtn.Text = "X"
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 9
+    closeBtn.TextColor3 = C.Muted
+    closeBtn.AutoButtonColor = false
+    closeBtn.Parent = header
+    round(closeBtn, 3)
+    closeBtn.MouseButton1Click:Connect(function() LearnFrame.Visible = false end)
+
+    local lTabBar = Instance.new("Frame")
+    lTabBar.Size = UDim2.new(1,-12,0,18)
+    lTabBar.Position = UDim2.new(0,6,0,22)
+    lTabBar.BackgroundColor3 = C.BgRow
+    lTabBar.BackgroundTransparency = 0.3
+    lTabBar.BorderSizePixel = 0
+    lTabBar.Parent = LearnFrame
+    round(lTabBar, 4)
+
+    local lTabDefs = {"Teach","Similar","Bulk"}
+    local lTabButtons = {}
+    for i, name in ipairs(lTabDefs) do
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1/3,-1,1,0)
+        b.Position = UDim2.new((i-1)/3, i==1 and 1 or 0, 0, 0)
+        b.BackgroundColor3 = (i==1) and C.Learn or C.TabOff
+        b.BackgroundTransparency = 0.2
+        b.BorderSizePixel = 0
+        b.Text = name
+        b.TextColor3 = (i==1) and C.White or C.Muted
+        b.Font = Enum.Font.GothamBold
+        b.TextSize = 8
+        b.AutoButtonColor = false
+        b.Parent = lTabBar
+        round(b, 3)
+        lTabButtons[name] = b
+    end
+
+    local content = Instance.new("Frame")
+    content.Size = UDim2.new(1,0,1,-42)
+    content.Position = UDim2.new(0,0,0,42)
+    content.BackgroundTransparency = 1
+    content.Parent = LearnFrame
+
+    local function makeLPanel(name)
+        local p = Instance.new("Frame")
+        p.Name = name
+        p.Size = UDim2.new(1,0,1,0)
+        p.BackgroundTransparency = 1
+        p.Visible = false
+        p.Parent = content
+        return p
+    end
+    local teachPanel   = makeLPanel("Teach")
+    local similarPanel = makeLPanel("Similar")
+    local bulkPanel    = makeLPanel("Bulk")
+
+    local qLabel = Instance.new("TextLabel")
+    qLabel.Size = UDim2.new(1,-16,0,10)
+    qLabel.Position = UDim2.new(0,8,0,4)
+    qLabel.BackgroundTransparency = 1
+    qLabel.Font = Enum.Font.GothamMedium
+    qLabel.TextSize = 8
+    qLabel.TextColor3 = C.Text
+    qLabel.TextXAlignment = Enum.TextXAlignment.Left
+    qLabel.Text = "Question(s):"
+    qLabel.Parent = teachPanel
+
+    local qBox = Instance.new("TextBox")
+    qBox.Size = UDim2.new(1,-16,0,22)
+    qBox.Position = UDim2.new(0,8,0,16)
+    qBox.BackgroundColor3 = C.BgRow
+    qBox.BorderSizePixel = 0
+    qBox.Text = ""
+    qBox.PlaceholderText = "my name is and fav color"
+    qBox.PlaceholderColor3 = C.Muted
+    qBox.TextColor3 = C.Text
+    qBox.Font = Enum.Font.Gotham
+    qBox.TextSize = 9
+    qBox.TextXAlignment = Enum.TextXAlignment.Left
+    qBox.ClearTextOnFocus = false
+    qBox.Parent = teachPanel
+    round(qBox, 5)
+
+    local aLabel = Instance.new("TextLabel")
+    aLabel.Size = UDim2.new(1,-16,0,10)
+    aLabel.Position = UDim2.new(0,8,0,42)
+    aLabel.BackgroundTransparency = 1
+    aLabel.Font = Enum.Font.GothamMedium
+    aLabel.TextSize = 8
+    aLabel.TextColor3 = C.Text
+    aLabel.TextXAlignment = Enum.TextXAlignment.Left
+    aLabel.Text = "Answer(s):"
+    aLabel.Parent = teachPanel
+
+    local aBox = Instance.new("TextBox")
+    aBox.Size = UDim2.new(1,-16,0,22)
+    aBox.Position = UDim2.new(0,8,0,54)
+    aBox.BackgroundColor3 = C.BgRow
+    aBox.BorderSizePixel = 0
+    aBox.Text = ""
+    aBox.PlaceholderText = "sammy, blue"
+    aBox.PlaceholderColor3 = C.Muted
+    aBox.TextColor3 = C.Text
+    aBox.Font = Enum.Font.Gotham
+    aBox.TextSize = 9
+    aBox.TextXAlignment = Enum.TextXAlignment.Left
+    aBox.ClearTextOnFocus = false
+    aBox.Parent = teachPanel
+    round(aBox, 5)
+
+    local saveBtn = Instance.new("TextButton")
+    saveBtn.Size = UDim2.new(0.5,-11,0,20)
+    saveBtn.Position = UDim2.new(0,8,0,82)
+    saveBtn.BackgroundColor3 = C.Green
+    saveBtn.BorderSizePixel = 0
+    saveBtn.Text = "Save"
+    saveBtn.Font = Enum.Font.GothamBold
+    saveBtn.TextSize = 9
+    saveBtn.TextColor3 = C.White
+    saveBtn.Parent = teachPanel
+    round(saveBtn, 5)
+
+    local testBtn = Instance.new("TextButton")
+    testBtn.Size = UDim2.new(0.5,-11,0,20)
+    testBtn.Position = UDim2.new(0.5,3,0,82)
+    testBtn.BackgroundColor3 = C.Learn
+    testBtn.BorderSizePixel = 0
+    testBtn.Text = "Test"
+    testBtn.Font = Enum.Font.GothamBold
+    testBtn.TextSize = 9
+    testBtn.TextColor3 = C.White
+    testBtn.Parent = teachPanel
+    round(testBtn, 5)
+
+    local forgetBtn = Instance.new("TextButton")
+    forgetBtn.Size = UDim2.new(1,-16,0,18)
+    forgetBtn.Position = UDim2.new(0,8,0,106)
+    forgetBtn.BackgroundColor3 = C.BgRow
+    forgetBtn.BorderSizePixel = 0
+    forgetBtn.Text = "Forget question above"
+    forgetBtn.Font = Enum.Font.Gotham
+    forgetBtn.TextSize = 9
+    forgetBtn.TextColor3 = C.Muted
+    forgetBtn.Parent = teachPanel
+    round(forgetBtn, 5)
+
+    local searchLabel = Instance.new("TextLabel")
+    searchLabel.Size = UDim2.new(1,-16,0,10)
+    searchLabel.Position = UDim2.new(0,8,0,4)
+    searchLabel.BackgroundTransparency = 1
+    searchLabel.Font = Enum.Font.GothamMedium
+    searchLabel.TextSize = 8
+    searchLabel.TextColor3 = C.AccentHi
+    searchLabel.TextXAlignment = Enum.TextXAlignment.Left
+    searchLabel.Text = "Search existing entries:"
+    searchLabel.Parent = similarPanel
+
+    local searchBox = Instance.new("TextBox")
+    searchBox.Size = UDim2.new(1,-16,0,22)
+    searchBox.Position = UDim2.new(0,8,0,16)
+    searchBox.BackgroundColor3 = C.BgRow
+    searchBox.BorderSizePixel = 0
+    searchBox.Text = ""
+    searchBox.PlaceholderText = "type a question..."
+    searchBox.PlaceholderColor3 = C.Muted
+    searchBox.TextColor3 = C.Text
+    searchBox.Font = Enum.Font.Gotham
+    searchBox.TextSize = 9
+    searchBox.TextXAlignment = Enum.TextXAlignment.Left
+    searchBox.ClearTextOnFocus = false
+    searchBox.Parent = similarPanel
+    round(searchBox, 5)
+
+    local simBox = Instance.new("ScrollingFrame")
+    simBox.Size = UDim2.new(1,-16,1,-46)
+    simBox.Position = UDim2.new(0,8,0,42)
+    simBox.BackgroundColor3 = C.BgRow
+    simBox.BackgroundTransparency = 0.3
+    simBox.BorderSizePixel = 0
+    simBox.ScrollBarThickness = 2
+    simBox.ScrollBarImageColor3 = C.Accent
+    simBox.CanvasSize = UDim2.new(0,0,0,0)
+    simBox.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    simBox.Parent = similarPanel
+    round(simBox, 5)
+
+    local simLayout = Instance.new("UIListLayout")
+    simLayout.Padding = UDim.new(0,2)
+    simLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    simLayout.Parent = simBox
+
+    learnSimilarList = function(query)
+        for _, c in ipairs(simBox:GetChildren()) do
+            if c:IsA("TextLabel") then c:Destroy() end
+        end
+        local q = query or searchBox.Text
+        if q == "" then
+            local empty = Instance.new("TextLabel")
+            empty.Size = UDim2.new(1,-6,0,12)
+            empty.BackgroundTransparency = 1
+            empty.Font = Enum.Font.Gotham
+            empty.TextSize = 8
+            empty.TextColor3 = C.Muted
+            empty.TextXAlignment = Enum.TextXAlignment.Left
+            empty.Text = "  (type to see matches)"
+            empty.Parent = simBox
+            return
+        end
+        local matches = findSimilarRiddles(q, 60)
+        if #matches == 0 then
+            local empty = Instance.new("TextLabel")
+            empty.Size = UDim2.new(1,-6,0,12)
+            empty.BackgroundTransparency = 1
+            empty.Font = Enum.Font.Gotham
+            empty.TextSize = 8
+            empty.TextColor3 = C.Muted
+            empty.TextXAlignment = Enum.TextXAlignment.Left
+            empty.Text = "  (no matches)"
+            empty.Parent = simBox
+            return
+        end
+        for i, m in ipairs(matches) do
+            local l = Instance.new("TextLabel")
+            l.Size = UDim2.new(1,-6,0,12)
+            l.BackgroundTransparency = 1
+            l.Font = Enum.Font.Gotham
+            l.TextSize = 8
+            l.TextColor3 = (i <= 3) and C.AccentHi or C.Text
+            l.TextXAlignment = Enum.TextXAlignment.Left
+            l.LayoutOrder = i
+            l.TextTruncate = Enum.TextTruncate.AtEnd
+            l.Text = "  "..m.key.." = "..tostring(m.val)
+            l.Parent = simBox
+        end
+    end
+
+    local bulkLabel = Instance.new("TextLabel")
+    bulkLabel.Size = UDim2.new(1,-16,0,10)
+    bulkLabel.Position = UDim2.new(0,8,0,4)
+    bulkLabel.BackgroundTransparency = 1
+    bulkLabel.Font = Enum.Font.GothamMedium
+    bulkLabel.TextSize = 8
+    bulkLabel.TextColor3 = C.LearnHi
+    bulkLabel.TextXAlignment = Enum.TextXAlignment.Left
+    bulkLabel.Text = "question = answer (one per line):"
+    bulkLabel.Parent = bulkPanel
+
+    local bulkBox = Instance.new("TextBox")
+    bulkBox.Size = UDim2.new(1,-16,1,-48)
+    bulkBox.Position = UDim2.new(0,8,0,16)
+    bulkBox.BackgroundColor3 = C.BgRow
+    bulkBox.BorderSizePixel = 0
+    bulkBox.Text = ""
+    bulkBox.PlaceholderText = "what is my name = SAMMY\nwho made sab = SAMMY"
+    bulkBox.PlaceholderColor3 = C.Muted
+    bulkBox.TextColor3 = C.Text
+    bulkBox.Font = Enum.Font.Gotham
+    bulkBox.TextSize = 9
+    bulkBox.TextXAlignment = Enum.TextXAlignment.Left
+    bulkBox.TextYAlignment = Enum.TextYAlignment.Top
+    bulkBox.MultiLine = true
+    bulkBox.ClearTextOnFocus = false
+    bulkBox.Parent = bulkPanel
+    round(bulkBox, 5)
+
+    local bulkAddBtn = Instance.new("TextButton")
+    bulkAddBtn.Size = UDim2.new(0.5,-11,0,18)
+    bulkAddBtn.Position = UDim2.new(0,8,1,-22)
+    bulkAddBtn.BackgroundColor3 = C.Learn
+    bulkAddBtn.BorderSizePixel = 0
+    bulkAddBtn.Text = "Add All"
+    bulkAddBtn.Font = Enum.Font.GothamBold
+    bulkAddBtn.TextSize = 9
+    bulkAddBtn.TextColor3 = C.White
+    bulkAddBtn.Parent = bulkPanel
+    round(bulkAddBtn, 5)
+
+    local bulkClearBtn = Instance.new("TextButton")
+    bulkClearBtn.Size = UDim2.new(0.5,-11,0,18)
+    bulkClearBtn.Position = UDim2.new(0.5,3,1,-22)
+    bulkClearBtn.BackgroundColor3 = C.BgRow
+    bulkClearBtn.BorderSizePixel = 0
+    bulkClearBtn.Text = "Clear"
+    bulkClearBtn.Font = Enum.Font.Gotham
+    bulkClearBtn.TextSize = 9
+    bulkClearBtn.TextColor3 = C.Muted
+    bulkClearBtn.Parent = bulkPanel
+    round(bulkClearBtn, 5)
+
+    local function switchLearnTab(name)
+        for tn, btn in pairs(lTabButtons) do
+            if tn == name then
+                btn.BackgroundColor3 = C.Learn; btn.TextColor3 = C.White
+            else
+                btn.BackgroundColor3 = C.TabOff; btn.TextColor3 = C.Muted
+            end
+        end
+        teachPanel.Visible   = (name == "Teach")
+        similarPanel.Visible = (name == "Similar")
+        bulkPanel.Visible    = (name == "Bulk")
+        if name == "Similar" then learnSimilarList() end
+    end
+    for name, btn in pairs(lTabButtons) do
+        btn.MouseButton1Click:Connect(function() switchLearnTab(name) end)
+    end
+    switchLearnTab("Teach")
+
+    local minimized = false
+    minBtn.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        if minimized then
+            LearnFrame.Size = miniS
+            lTabBar.Visible = false
+            content.Visible = false
+            minBtn.Text = "□"
+        else
+            LearnFrame.Size = fullS
+            lTabBar.Visible = true
+            content.Visible = true
+            minBtn.Text = "—"
+        end
+    end)
+
+    saveBtn.MouseButton1Click:Connect(function()
+        local q, a = qBox.Text, aBox.Text
+        if q == "" or a == "" then return end
+        local answers = {}
+        for part in a:gmatch("[^,]+") do
+            part = trim(part)
+            if part ~= "" then answers[#answers+1] = part end
+        end
+        if teachRiddle(q, answers) then
+            addLog("Learned: "..q, C.Green)
+            qBox.Text = ""; aBox.Text = ""
+        else addLog("Learn failed", C.Red) end
+    end)
+    testBtn.MouseButton1Click:Connect(function()
+        local q = qBox.Text
+        if q == "" then return end
+        local ans, breakdown, note = solveRiddle(q)
+        addLog("Test: "..q, C.Muted)
+        if breakdown then
+            for _, line in ipairs(breakdown) do
+                addLog("  "..line, line:sub(-1)=="?" and C.Red or C.Muted)
+            end
+        end
+        if ans then addLog("  -> "..ans, C.Green)
+        else addLog("  -> "..tostring(note or "unknown"), C.Red) end
+    end)
+    forgetBtn.MouseButton1Click:Connect(function()
+        local q = qBox.Text
+        if q == "" then return end
+        if forgetRiddle(q) then addLog("Forgot: "..q, C.Red)
+        else addLog("Not in learned DB: "..q, C.Muted) end
+    end)
+
+    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        learnSimilarList()
+    end)
+
+    bulkAddBtn.MouseButton1Click:Connect(function()
+        local text = bulkBox.Text or ""
+        local count = 0
+        for line in text:gmatch("[^\r\n]+") do
+            local q, a = line:match("^(.-)%s*[=]%s*(.+)$")
+            if not q then q, a = line:match("^(.-)%s*|%s*(.+)$") end
+            if q and a and trim(q) ~= "" and trim(a) ~= "" then
+                local answers = {}
+                for part in a:gmatch("[^,]+") do
+                    part = trim(part)
+                    if part ~= "" then answers[#answers+1] = part end
+                end
+                if teachRiddle(trim(q), answers) then count = count + 1 end
+            end
+        end
+        if count > 0 then
+            addLog("Bulk added "..count.." entries", C.Green)
+            bulkBox.Text = ""
+        else
+            addLog("Bulk add: no valid lines", C.Red)
+        end
+    end)
+    bulkClearBtn.MouseButton1Click:Connect(function() bulkBox.Text = "" end)
+end
+buildLearnWindow()
+
+-- ============================================================
+-- PREVIEW WINDOW: best redeems (small 150x100, draggable)
+-- ============================================================
+local PreviewGui, PreviewFrame
+do
+    PreviewGui = Instance.new("ScreenGui")
+    PreviewGui.Name = "LarpSourcesPreview"
+    PreviewGui.ResetOnSpawn = false
+    PreviewGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    PreviewGui.Parent = PlayerGui
+
+    PreviewFrame = Instance.new("Frame")
+    PreviewFrame.Name = "PreviewFrame"
+    PreviewFrame.Size = UDim2.new(0, 150, 0, 100)
+    PreviewFrame.Position = UDim2.new(0, 20, 0.5, -50)
+    PreviewFrame.BackgroundColor3 = C.Bg
+    PreviewFrame.BackgroundTransparency = 0.08
+    PreviewFrame.BorderSizePixel = 0
+    PreviewFrame.Active = true
+    PreviewFrame.Draggable = true
+    PreviewFrame.ClipsDescendants = true
+    PreviewFrame.Parent = PreviewGui
+    round(PreviewFrame, 10)
+    animStroke(PreviewFrame, 1.3, C.Stroke, C.Gold, 0.15, 55)
+
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, 18)
+    header.BackgroundColor3 = C.BgRow
+    header.BackgroundTransparency = 0.25
+    header.BorderSizePixel = 0
+    header.Parent = PreviewFrame
+    round(header, 8)
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -8, 1, 0)
+    title.Position = UDim2.new(0, 6, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 11
+    title.TextColor3 = C.Gold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Text = "Redeems"
+    title.Parent = header
+
+    local list = Instance.new("Frame")
+    list.Size = UDim2.new(1, -8, 1, -24)
+    list.Position = UDim2.new(0, 4, 0, 20)
+    list.BackgroundTransparency = 1
+    list.Parent = PreviewFrame
+
+    local ll = Instance.new("UIListLayout")
+    ll.Padding = UDim.new(0, 3)
+    ll.SortOrder = Enum.SortOrder.LayoutOrder
+    ll.Parent = list
+
+    local items = {
+        {name = "Dragon Cannelloni", tag = "Owner"},
+        {name = "La Craft Machine", tag = "Owner"},
+        {name = "Money Puggy",       tag = "Owner :)"},
+    }
+
+    for i, item in ipairs(items) do
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 21)
+        row.BackgroundColor3 = C.BgRow
+        row.BackgroundTransparency = 0.4
+        row.BorderSizePixel = 0
+        row.LayoutOrder = i
+        row.Parent = list
+        round(row, 5)
+
+        local nameL = Instance.new("TextLabel")
+        nameL.Size = UDim2.new(0.62, -4, 1, 0)
+        nameL.Position = UDim2.new(0, 5, 0, 0)
+        nameL.BackgroundTransparency = 1
+        nameL.Font = Enum.Font.GothamMedium
+        nameL.TextSize = 9
+        nameL.TextColor3 = C.Text
+        nameL.TextXAlignment = Enum.TextXAlignment.Left
+        nameL.TextTruncate = Enum.TextTruncate.AtEnd
+        nameL.Text = item.name
+        nameL.Parent = row
+
+        local tagL = Instance.new("TextLabel")
+        tagL.Size = UDim2.new(0.38, -4, 1, 0)
+        tagL.Position = UDim2.new(0.62, 0, 0, 0)
+        tagL.BackgroundTransparency = 1
+        tagL.Font = Enum.Font.GothamBold
+        tagL.TextSize = 9
+        tagL.TextColor3 = C.Gold
+        tagL.TextXAlignment = Enum.TextXAlignment.Right
+        tagL.TextTruncate = Enum.TextTruncate.AtEnd
+        tagL.Text = "- "..item.tag
+        tagL.Parent = row
+    end
+end
+
+print("[LarpSources] side windows built")
+
+local seenWords = {}
+
+local function currentBox()
+    local pg = PlayerGui
+    if not pg then return nil end
+    local codes = pg:FindFirstChild("Codes")
+    if codes then
+        local root = codes:FindFirstChild("Codes") or codes
+        local redeem = root:FindFirstChild("CodeRedeem")
+        local box = redeem and redeem:FindFirstChild("TextBox")
+        if box and box:IsA("TextBox") then return box end
+        for _, d in ipairs(codes:GetDescendants()) do
+            if d:IsA("TextBox") and not isOurGui(d) then return d end
+        end
+    end
+    return nil
+end
+
+local NOISE_TOKENS = {"sfx", "itop"}
+local function isNoise(text)
+    if not text or text == "" then return true end
+    local l = text:lower()
+    for _, tok in ipairs(NOISE_TOKENS) do
+        if l:find(tok, 1, true) then return true end
+    end
+    return false
+end
+
+local function looksLikeCode(text)
+    if type(text) ~= "string" then return false end
+    if #text < 1 or #text > 30 then return false end
+    if not text:match("^[%w_]+$") then return false end
+    return true
+end
+
+local function pushWord(word)
+    if not word or word == "" then return end
+    if seenWords[word] then return end
+    seenWords[word] = true
+    task.delay(1.25, function() seenWords[word] = nil end)
+
+    capturedParts[#capturedParts+1] = word
+    local combined = table.concat(capturedParts)
+    
+    if cfg.spamMode then
+        addLog("Captured: "..word.." | Trying: "..combined, C.Green)
+        local box = currentBox()
+        if box then pcall(function() box.Text = combined end) end
+        fastRedeem(combined)
+    else
+        addLog("Captured "..#capturedParts.."/"..baseThreshold..": "..word, C.Green)
+        updateStatusBar()
+
+        local box = currentBox()
+        if box then pcall(function() box.Text = combined end) end
+
+        if #capturedParts >= baseThreshold then
+            fastRedeem(combined)
+            capturedParts = {}
+            updateStatusBar()
+        end
+    end
+end
+
+local function hasCodeTrigger(text)
+    local l = text:lower()
+    return l:find("use code", 1, true) ~= nil
+        or l:find("code is", 1, true) ~= nil
+        or l:find("new code", 1, true) ~= nil
+        or l:find("code:", 1, true) ~= nil
+        or l:find("code =", 1, true) ~= nil
+end
+
+local function onAnnouncement(raw)
+    if type(raw) ~= "string" then return end
+    local text = raw:gsub("<[^>]->","")
+    text = trim(text)
+    if text == "" then return end
+    if isNoise(text) then
+        addLog("(filtered: "..text:sub(1,30)..")", C.Muted)
+        return
+    end
+    
+    addLog("IN: "..text, C.White)
+
+    if hasCodeTrigger(text) then
+        codeTriggerArmed = true
+        capturedParts = {}
+        updateStatusBar()
+        if cfg.autoSnipeOnCodeIs and not cfg.codeSniper then
+            cfg.codeSniper = true; saveConfig()
+            toggleVisual(true, sniperBg, sniperKnob)
+            addLog("Auto-enabled Code Sniper (buffer cleared)", C.Green)
+        end
+        if cfg.onlyAfterUseCode then
+            addLog("Code trigger armed - now capturing", C.Green)
+        end
+    end
+
+    if cfg.onlyAfterUseCode and not codeTriggerArmed then
+        addLog("  (ignored - awaiting 'use code'/'code is' trigger)", C.Muted)
+        return
+    end
+
+    if text:find("%s") then
+        if cfg.riddleSolver then
+            askedCount = askedCount + 1; bumpSolved()
+            local ans, breakdown, note = solveRiddle(text)
+            if breakdown then
+                for _, line in ipairs(breakdown) do
+                    addLog("  "..line, line:sub(-1)=="?" and C.Red or C.Muted)
+                end
+            end
+            if ans then
+                solvedCount = solvedCount + 1; bumpSolved()
+                addLog("  Answer: "..ans, C.Green)
+                if cfg.autoSubmit then
+                    task.spawn(function()
+                        local box = currentBox()
+                        if box then pcall(function() box.Text = ans end) end
+                        fastRedeem(ans)
+                    end)
+                else
+                    addLog("  (Auto Submit OFF - answer held)", C.Muted)
+                end
+            else
+                addLog("  "..tostring(note or "unknown"), C.Red)
+            end
+        else
+            addLog("  (Riddle Solver is OFF)", C.Muted)
+        end
+        return
+    end
+
+    if not cfg.codeSniper then
+        addLog("  (Code Sniper is OFF)", C.Muted)
+        return
+    end
+    if not looksLikeCode(text) then
+        addLog("  (skipped: '"..text.."')", C.Muted)
+        return
+    end
+    
+    pushWord(text)
+end
+_G.LarpSourcesAnnounce = onAnnouncement
+_G.StellaHubAnnounce = onAnnouncement
+_G.JetHubAnnounce = onAnnouncement
+
+local notificationRemote = nil
+local listenerHooked = false
+
+local function registerRemote(r)
+    if listenerHooked then return end
+    if not r or not r.Parent then return end
+    if not r:IsA("RemoteEvent") then return end
+    listenerHooked = true
+    notificationRemote = r
+    r.OnClientEvent:Connect(function(...)
+        local args = {...}
+        if #args == 0 then return end
+        local first = args[1]
+        local text = nil
+        if type(first) == "string" then text = first
+        elseif type(first) == "table" then
+            text = first.Text or first.Message or first.Content or first.Title
+        end
+        if type(text) == "string" then task.spawn(onAnnouncement, text) end
+    end)
+end
+
+local function pathController()
+    local ok, controller = pcall(function()
+        local c = ReplicatedStorage:FindFirstChild("Controllers")
+        local n = c and c:FindFirstChild("NotificationController", true)
+        if n then return require(n) end
+    end)
+    if ok and type(controller)=="table" and type(controller.Start)=="function"
+        and typeof(getupvalues)=="function" then
+        local ok2, values = pcall(getupvalues, controller.Start)
+        if ok2 and type(values)=="table" then
+            for _, v in pairs(values) do
+                if typeof(v)=="Instance" and v:IsA("RemoteEvent") then
+                    registerRemote(v); if listenerHooked then return end
+                end
+            end
+        end
+    end
+end
+
+local function pathNetPackage()
+    if listenerHooked then return end
+    if not (getinfo and getconns) then return end
+    local packages = ReplicatedStorage:FindFirstChild("Packages")
+    local net = packages and packages:FindFirstChild("Net")
+    if not net then return end
+    for _, d in ipairs(net:GetDescendants()) do
+        if listenerHooked then return end
+        if d:IsA("RemoteEvent") then
+            local ok, cs = pcall(getconns, d.OnClientEvent)
+            if ok and type(cs)=="table" then
+                for _, c in ipairs(cs) do
+                    local f, fn = pcall(function() return c.Function end)
+                    if f and type(fn)=="function" then
+                        local i, info = pcall(getinfo, fn)
+                        if i and info and tostring(info.short_src or info.source or "")
+                            :find("NotificationController",1,true) then
+                            registerRemote(d); break
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+task.spawn(function()
+    task.wait(0.5)
+    pcall(pathController)
+    pcall(pathNetPackage)
+    if listenerHooked then
+        addLog("Listener: hooked "..notificationRemote.Name, C.Green)
+    else
+        addLog("WARNING: no notification remote found", C.Red)
+    end
+end)
+
+local OWNER_NAMES = {
+    ["ronda12g"] = true,
+    ["Adelgoats"] = true,
+}
+local function isOwnerName(name)
+    return OWNER_NAMES[name] == true
+end
+
+local function applyTag(char)
+    if not char then return end
+    local head = char:WaitForChild("Head", 10)
+    if not head then return end
+    local old = head:FindFirstChild("LarpSourcesTag")
+    if old then old:Destroy() end
+    local isOwner = isOwnerName(LP.Name)
+    local bb = Instance.new("BillboardGui")
+    bb.Name = "LarpSourcesTag"
+    bb.Size = UDim2.new(0, 240, 0, isOwner and 46 or 24)
+    bb.StudsOffset = Vector3.new(0, isOwner and 3.5 or 2.8, 0)
+    bb.AlwaysOnTop = true
+    bb.Parent = head
+    local function mkLabel(text, y, h, color, size)
+        local l = Instance.new("TextLabel")
+        l.Size = UDim2.new(1, 0, 0, h)
+        l.Position = UDim2.new(0, 0, 0, y)
+        l.BackgroundTransparency = 1
+        l.Text = text
+        l.TextColor3 = color
+        l.TextStrokeTransparency = 0
+        l.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        l.TextSize = size
+        l.Font = Enum.Font.GothamBold
+        l.Parent = bb
+        return l
+    end
+    if isOwner then
+        mkLabel(LP.Name.."  OWNER!! :)", 0, 22, Color3.fromRGB(255, 215, 0), 17)
+        mkLabel("Larp Sources user", 22, 22, C.AccentHi, 14)
+    else
+        mkLabel("Larp Sources user", 0, 24, C.AccentHi, 14)
+    end
+end
+task.spawn(function()
+    local c = LP.Character or LP.CharacterAdded:Wait()
+    applyTag(c)
+end)
+local tagConn = LP.CharacterAdded:Connect(function(c) task.spawn(applyTag, c) end)
+conns[#conns+1] = tagConn
+
+pcall(installRedeemHook)
+
+toggleVisual(cfg.codeSniper, sniperBg, sniperKnob)
+toggleVisual(cfg.autoSubmit, autoBg, autoKnob)
+toggleVisual(cfg.autoSnipeOnCodeIs, autoSnipeBg, autoSnipeKnob)
+do
+    local refs = _G.__shOnlyAfterRefs
+    if refs and refs.bg and refs.knob then
+        toggleVisual(cfg.onlyAfterUseCode, refs.bg, refs.knob)
+    end
+    local refs2 = _G.__shSpamModeRefs
+    if refs2 and refs2.bg and refs2.knob then
+        toggleVisual(cfg.spamMode, refs2.bg, refs2.knob)
+    end
+end
+updateStatusBar()
+
+addLog("Larp Sources loaded", C.Green)
+addLog("made by larp and Ron", C.Muted)
+if isOwnerName(LP.Name) then
+    addLog("Welcome back, "..LP.Name.." (OWNER)", C.AccentHi)
+end
+addLog("dragon, la craft machine, tang tang, and money puggy redeemed so far", C.AccentHi)
+addLog("Sniper: "..(cfg.codeSniper and "ON" or "OFF"), C.Muted)
+addLog("Auto Submit: "..(cfg.autoSubmit and "ON" or "OFF"), C.Muted)
+addLog("Auto-Snipe 'code is'/'use code': "..(cfg.autoSnipeOnCodeIs and "ON" or "OFF"), C.Muted)
+addLog("Capture After 'Use Code'/'Code Is': "..(cfg.onlyAfterUseCode and "ON" or "OFF"), C.Muted)
+addLog("Spam Every Word: "..(cfg.spamMode and "ON" or "OFF"), cfg.spamMode and C.Green or C.Muted)
+addLog("Riddle: "..(cfg.riddleSolver and "ON" or "OFF"), C.Muted)
+addLog("Submit after: "..cfg.submitAfter, C.Muted)
+
+local function stopAll()
+    for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+    conns = {}
+    for _, g in ipairs({ScreenGui, LogsGui, LearnGui, PreviewGui}) do
+        if g then pcall(function() g:Destroy() end) end
+    end
+    pcall(function()
+        local ch = LP.Character
+        local head = ch and ch:FindFirstChild("Head")
+        local t = head and head:FindFirstChild("LarpSourcesTag")
+        if t then t:Destroy() end
+    end)
+end
+env.LarpSourcesStop = stopAll
+env.StellaHubStop = stopAll
+env.JetHubStop    = stopAll
+env.Skyr0Stop     = stopAll
+
+task.spawn(function()
+    while ScreenGui and ScreenGui.Parent do task.wait(5) end
+    stopAll()
+end)
+
+print("[LarpSources] boot complete")
+
+end)
+
+if not ok_boot then
+    warn("[LarpSources] FATAL ERROR: "..tostring(err_boot))
+    pcall(function()
+        local sg = Instance.new("ScreenGui")
+        sg.Name = "LarpSourcesError"
+        sg.Parent = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+        local l = Instance.new("TextLabel", sg)
+        l.Size = UDim2.new(1,0,0,80)
+        l.Position = UDim2.new(0,0,0.5,-40)
+        l.BackgroundTransparency = 1
+        l.TextColor3 = Color3.new(1,0.3,0.3)
+        l.TextStrokeTransparency = 0
+        l.Font = Enum.Font.GothamBold
+        l.TextSize = 14
+        l.TextWrapped = true
+        l.Text = "Larp Sources failed:\n"..tostring(err_boot)
+    end)
+end
